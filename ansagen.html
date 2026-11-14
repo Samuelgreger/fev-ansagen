@@ -104,10 +104,17 @@
 
   /* Folie, die nur aus dem Flyer besteht */
   .nurbild { left: 0; right: 0; top: 0; bottom: 0; }
-  .nurbild .bild { position: absolute; inset: 0; }
-  .nurbild .bild img { border-radius: 0; box-shadow: none; }
+  .nurbild .bild { position: absolute; inset: 0 0 150px 0; }   /* unten bleibt ein Streifen für den Countdown frei */
+  /* Bild füllt die Fläche so weit wie möglich, ohne beschnitten zu werden – auch kleine Bilder werden vergrößert */
+  .nurbild .bild img { width: 100%; height: 100%; object-fit: contain; border-radius: 0; box-shadow: none; }
   #kopf { transition: opacity 1s; }
   #buehne.flyer #kopf { opacity: 0; }
+  /* Bei einer Bild-Folie rücken Countdown und Punkte kleiner in den Streifen unter dem Bild */
+  #uhr { transition: opacity 1s; }
+  #buehne.flyer #uhr { bottom: 28px; }
+  #buehne.flyer #uhr span { font-size: 20px; }
+  #buehne.flyer #uhr strong { font-size: 68px; margin-top: 2px; }
+  #buehne.flyer #punkte { bottom: 66px; }
 
   /* Fuß: Punkte links, Countdown rechts */
   #punkte { position: absolute; left: 120px; bottom: 112px; display: flex; gap: 16px; }
@@ -116,7 +123,6 @@
 
   #uhr {
     position: absolute; right: 120px; bottom: 84px; text-align: right;
-    transition: opacity 1s;
   }
   #uhr span { display: block; font-size: 28px; letter-spacing: .18em; text-transform: uppercase; color: var(--leise); }
   #uhr strong {
