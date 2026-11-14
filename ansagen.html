@@ -3,95 +3,8 @@
 <head>
 <meta charset="utf-8">
 <title>Ansagen</title>
-<script>
-/* =====================================================================
-   HIER ANPASSEN – alles andere kann so bleiben
-   ===================================================================== */
-
-const EINSTELLUNGEN = {
-  gemeinde: "FEV Spaichingen",      // Name oben links
-  wochentag: 6,                      // 0 = Sonntag, 1 = Montag, … 6 = Samstag
-  beginn: "10:22",                   // normale Uhrzeit des Gottesdienstes
-
-  // Einmal im Monat beginnt der Gottesdienst früher:
-  frueherBeginn: "09:30",
-  frueherAmSonntagNr: 1,             // 1 = erster Sonntag im Monat, 2 = zweiter, … 0 = Regel aus
-  frueherAnTerminen: [],             // oder einzelne Tage nennen, z. B. ["2026-12-13", "2027-01-10"]
-
-  sekundenProFolie: 12,              // wie lange jede Ansage stehen bleibt
-  grosserCountdownAb: 60,            // so viele Sekunden vor Beginn erscheint der Countdown
-  kleineUhrInDerEcke: true,         // true = Restzeit steht zusätzlich dauerhaft unten rechts
-  schlussTitel: "Herzlich willkommen",
-  schlussText: "Der Gottesdienst beginnt"
-};
-
-/* Jede Ansage ist ein Block in geschweiften Klammern.
-   rubrik = kleines Schlagwort, titel = Überschrift,
-   wann = Datum/Uhrzeit/Ort (darf leer sein), text = ein, zwei Sätze. */
-const ANSAGEN = [
-  {
-    rubrik: "Willkommen",
-    titel: "Schön, dass du da bist",
-    wann: "",
-    text: "Nimm dir einen Kaffee, such dir einen Platz – wir fangen gleich an."
-  },
-  {
-    // Ü60 findet nicht jede Woche statt:
-    // anzeigen: false blendet die Folie aus, bibelstelle darf leer bleiben ("").
-    anzeigen: true,
-    rubrik: "Montag",
-    titel: "Ü60",
-    wann: "Montag · 16:00 Uhr",
-    bibelstelle: "Matthäus 1",
-    text: "Der Treff für alle über 60."
-  },
-  {
-    ausfall: "Fällt diese Woche aus",   // Zeile löschen, wenn es wieder stattfindet
-    rubrik: "Dienstag",
-    titel: "Kleingruppen & Bibelstunde",
-    wann: "Dienstags · 19:00 Uhr · im wöchentlichen Wechsel",
-    text: "Eine Woche treffen sich die Hauskreise, in der nächsten ist Bibelstunde."
-  },
-  {
-    // Mehrere Termine auf einer Folie: jede Zeile der liste ist
-    // "Uhrzeit | Name | Zusatz" – der Zusatz darf fehlen.
-    // Fällt etwas aus, hänge einen vierten Teil an, z. B.
-    //   "18:00 Uhr | Teenkreis | 11 bis 15 Jahre | fällt aus"
-    // Bei einer normalen Folie geht dasselbe mit der Zeile
-    //   ausfall: "Fällt diese Woche aus",
-    rubrik: "Freitag",
-    titel: "Freitags bei uns",
-    liste: [
-      "18:00 Uhr | Gebet",
-      "18:00 Uhr | Jungschar | 8 bis 11 Jahre",
-      "18:00 Uhr | Teenkreis | 11 bis 15 Jahre | fällt aus",
-      "20:00 Uhr | Jugend | ab 15 Jahren"
-    ]
-  },
-  {
-    // Folie mit Flyer rechts neben dem Text.
-    // Die Bilddatei liegt im selben Ordner wie ansagen.html.
-    anzeigen: true,                 // auf true stellen, um die Folie zu zeigen
-    rubrik: "Besonderes",
-    titel: "Titel der Veranstaltung",
-    wann: "Samstag, 5. Dezember · 15:00 Uhr",
-    text: "Ein kurzer Satz dazu.",
-    bild: "beispiel-flyer.svg"
-  },
-  {
-    // Folie, die nur aus dem Flyer besteht (füllt den ganzen Bildschirm).
-    anzeigen: true,                 // auf true stellen, um die Folie zu zeigen
-    bild: "beispiel-flyer.svg",
-    bildGross: true
-  },
-  {
-    rubrik: "Sonntag",
-    titel: "Gebet & Gottesdienst",
-    wann: "Sonntags · 9:30 Uhr Gebet · 10:00 Uhr Gottesdienst",
-    text: "Am ersten Sonntag im Monat beginnt der Gottesdienst schon um 9:30 Uhr – ohne Gebet davor."
-  }
-];
-</script>
+<!-- Inhalte und Einstellungen stehen in ansagen-daten.js (bearbeiten mit „Ansagen bearbeiten.command“) -->
+<script src="ansagen-daten.js"></script>
 <style>
   :root {
     --grund: #12161d;
@@ -242,6 +155,10 @@ const ANSAGEN = [
     transition: opacity .6s;
   }
   body.ruhig #hinweis { opacity: 0; }
+
+  /* Eingebettet als Vorschau in „Ansagen bearbeiten“: steht still, ohne Übergänge */
+  body.vorschau #hinweis { display: none; }
+  body.vorschau .folie, body.vorschau .folie > * { transition: none; }
 </style>
 </head>
 <body>
@@ -259,9 +176,15 @@ const ANSAGEN = [
 
 <script>
 (function () {
-  const E = EINSTELLUNGEN;
   const $ = id => document.getElementById(id);
   const buehne = $("buehne");
+  if (typeof EINSTELLUNGEN === "undefined" || typeof ANSAGEN === "undefined") {
+    $("hinweis").textContent = "Die Datei ansagen-daten.js fehlt oder enthält einen Fehler – sie muss im selben Ordner liegen wie ansagen.html.";
+    return;
+  }
+  let E = EINSTELLUNGEN, A = ANSAGEN;
+  const parameter = new URLSearchParams(location.search);
+  const vorschau = parameter.has("vorschau");      // eingebettet in „Ansagen bearbeiten“
 
   /* ---- Bühne auf den Bildschirm skalieren ---- */
   function skalieren() {
@@ -272,77 +195,86 @@ const ANSAGEN = [
   skalieren();
 
   /* ---- Folien aufbauen ---- */
-  $("kopf").textContent = E.gemeinde;
-  $("schlusstext").textContent = E.schlussText;
-  const folien = ANSAGEN.filter(a => a.anzeigen !== false).map(a => {
-    const f = document.createElement("section");
-    f.className = "folie";
-    if (a.ausfall) f.classList.add("abgesagt");    // ganze Folie: Termin fällt aus
-    [["rubrik", a.rubrik], ["titel", a.titel], ["ausfall", a.ausfall], ["wann", a.wann], ["stelle", a.bibelstelle], ["text", a.text]].forEach(([k, v]) => {
-      if (!v) return;
-      const el = document.createElement("div");
-      el.className = k; el.textContent = v;
-      f.appendChild(el);
-    });
-    if (a.liste && a.liste.length) {               // mehrere Termine untereinander
-      f.classList.add("kompakt");
-      const l = document.createElement("div");
-      l.className = "liste";
-      a.liste.forEach(zeile => {
-        const teile = zeile.split("|").map(t => t.trim());
-        const aus = teile[3];                      // 4. Teil = Ausfall-Hinweis
-        ["zeit", "name", "notiz"].forEach((k, i) => {
-          const el = document.createElement("span");
-          el.className = k + (aus ? " aus" : "");
-          el.textContent = teile[i] || "";
-          if (aus && k === "notiz") {
-            el.className = "notiz";
-            el.textContent = "";
-            const marke = document.createElement("b");
-            marke.className = "ausfall"; marke.textContent = aus;
-            el.appendChild(marke);
-          }
-          l.appendChild(el);
-        });
+  let folien = [], punkte = [];
+  function aufbauen() {
+    $("kopf").textContent = E.gemeinde;
+    $("schlusstext").textContent = E.schlussText;
+    $("uhr").style.display = E.kleineUhrInDerEcke ? "" : "none";
+    $("folien").textContent = "";
+    $("punkte").textContent = "";
+    folien = A.filter(a => a.anzeigen !== false).map(a => {
+      const f = document.createElement("section");
+      f.className = "folie";
+      if (a.ausfall) f.classList.add("abgesagt");    // ganze Folie: Termin fällt aus
+      [["rubrik", a.rubrik], ["titel", a.titel], ["ausfall", a.ausfall], ["wann", a.wann], ["stelle", a.bibelstelle], ["text", a.text]].forEach(([k, v]) => {
+        if (!v) return;
+        const el = document.createElement("div");
+        el.className = k; el.textContent = v;
+        f.appendChild(el);
       });
-      f.appendChild(l);
-    }
-    if (a.bild) {                                  // Flyer / Bild
-      f.classList.add(a.bildGross ? "nurbild" : "mitbild");
-      const rahmen = document.createElement("div");
-      rahmen.className = "bild";
-      const img = document.createElement("img");
-      img.alt = "";
-      img.onerror = () => { rahmen.textContent = "Bild nicht gefunden: " + a.bild; };
-      img.src = a.bild;
-      rahmen.appendChild(img);
-      f.appendChild(rahmen);
-    }
-    $("folien").appendChild(f);
-    $("punkte").appendChild(document.createElement("i"));
-    return f;
-  });
-  const punkte = [...$("punkte").children];
+      if (a.liste && a.liste.length) {               // mehrere Termine untereinander
+        f.classList.add("kompakt");
+        const l = document.createElement("div");
+        l.className = "liste";
+        a.liste.forEach(zeile => {
+          const teile = zeile.split("|").map(t => t.trim());
+          const aus = teile[3];                      // 4. Teil = Ausfall-Hinweis
+          ["zeit", "name", "notiz"].forEach((k, i) => {
+            const el = document.createElement("span");
+            el.className = k + (aus ? " aus" : "");
+            el.textContent = teile[i] || "";
+            if (aus && k === "notiz") {
+              el.className = "notiz";
+              el.textContent = "";
+              const marke = document.createElement("b");
+              marke.className = "ausfall"; marke.textContent = aus;
+              el.appendChild(marke);
+            }
+            l.appendChild(el);
+          });
+        });
+        f.appendChild(l);
+      }
+      if (a.bild) {                                  // Flyer / Bild
+        f.classList.add(a.bildGross ? "nurbild" : "mitbild");
+        const rahmen = document.createElement("div");
+        rahmen.className = "bild";
+        const img = document.createElement("img");
+        img.alt = "";
+        img.onerror = () => { rahmen.textContent = "Bild nicht gefunden: " + a.bild; };
+        img.src = a.bild;
+        rahmen.appendChild(img);
+        f.appendChild(rahmen);
+      }
+      $("folien").appendChild(f);
+      $("punkte").appendChild(document.createElement("i"));
+      return f;
+    });
+    punkte = [...$("punkte").children];
+  }
+  aufbauen();
   const balken = document.querySelector("#balken b");
 
   let nr = -1, takt = null;
   function zeige(i) {
+    clearTimeout(takt);
+    if (!folien.length) return;                    // alle Folien ausgeblendet
     nr = (i + folien.length) % folien.length;
     folien.forEach((f, k) => f.classList.toggle("aktiv", k === nr));
     punkte.forEach((p, k) => p.classList.toggle("an", k === nr));
     buehne.classList.toggle("flyer", folien[nr].classList.contains("nurbild"));
     balken.classList.remove("laeuft");
+    if (vorschau) return;                          // Vorschau bleibt stehen
     void balken.offsetWidth;                       // Animation neu starten
     balken.style.animationDuration = E.sekundenProFolie + "s";
     balken.classList.add("laeuft");
-    clearTimeout(takt);
     takt = setTimeout(() => zeige(nr + 1), E.sekundenProFolie * 1000);
   }
   zeige(0);
 
   /* ---- Zielzeit bestimmen ----
      Zum Ausprobieren: ansagen.html?in=90 zählt 90 Sekunden herunter. */
-  const probe = new URLSearchParams(location.search).get("in");
+  const probe = parameter.get("in");
   const NACHLAUF = 3 * 3600 * 1000;                // Schlussbild bleibt 3 Stunden stehen
   let festesZiel = probe ? Date.now() + Number(probe) * 1000 : null;
 
@@ -369,21 +301,20 @@ const ANSAGEN = [
     return z.getTime();
   }
 
-  if (!E.kleineUhrInDerEcke) $("uhr").style.display = "none";
-
   function tick() {
     const rest = Math.ceil((ziel() - Date.now()) / 1000);
     const gross = $("gross");
-    if (rest <= 0) {
+    if (rest <= 0 && !vorschau) {
       gross.classList.add("an", "ende");
       $("grosszahl").textContent = E.schlussTitel;
       $("uhr").style.opacity = 0;
       return;
     }
     gross.classList.remove("ende");
+    if (rest <= 0) { $("uhrzeit").textContent = "0:00"; return; }
     const h = Math.floor(rest / 3600), m = Math.floor(rest % 3600 / 60), s = rest % 60;
     $("uhrzeit").textContent = h ? `${h}:${zz(m)}:${zz(s)}` : `${m}:${zz(s)}`;
-    const letzte = rest <= E.grosserCountdownAb;
+    const letzte = !vorschau && rest <= E.grosserCountdownAb;
     gross.classList.toggle("an", letzte);
     $("uhr").style.opacity = letzte ? 0 : 1;
     if (letzte) $("grosszahl").textContent = rest;
@@ -404,12 +335,25 @@ const ANSAGEN = [
   });
   let ruhe;
   function wach() {
+    if (vorschau) return;
     document.body.classList.remove("ruhig");
     clearTimeout(ruhe);
     ruhe = setTimeout(() => document.body.classList.add("ruhig"), 3000);
   }
   addEventListener("mousemove", wach);
   wach();
+
+  /* ---- Vorschau: „Ansagen bearbeiten“ schickt den ungespeicherten Stand herüber ---- */
+  if (vorschau) {
+    document.body.classList.add("vorschau");
+    addEventListener("message", e => {
+      if (e.source !== parent || !e.data || !Array.isArray(e.data.ansagen)) return;
+      E = e.data.einstellungen; A = e.data.ansagen;
+      aufbauen();
+      zeige(e.data.nr || 0);
+    });
+    parent.postMessage({ vorschauBereit: true }, "*");
+  }
 })();
 </script>
 </body>

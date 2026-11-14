@@ -1,0 +1,4 @@
+ansagen-daten.sicherung.js
+*.neu
+__pycache__/
+.DS_Store
