@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Ansagen</title>
+<script>
+/* =====================================================================
+   HIER ANPASSEN – alles andere kann so bleiben
+   ===================================================================== */
+
+const EINSTELLUNGEN = {
+  gemeinde: "FEV Spaichingen",      // Name oben links
+  wochentag: 6,                      // 0 = Sonntag, 1 = Montag, … 6 = Samstag
+  beginn: "10:22",                   // normale Uhrzeit des Gottesdienstes
+
+  // Einmal im Monat beginnt der Gottesdienst früher:
+  frueherBeginn: "09:30",
+  frueherAmSonntagNr: 1,             // 1 = erster Sonntag im Monat, 2 = zweiter, … 0 = Regel aus
+  frueherAnTerminen: [],             // oder einzelne Tage nennen, z. B. ["2026-12-13", "2027-01-10"]
+
+  sekundenProFolie: 12,              // wie lange jede Ansage stehen bleibt
+  grosserCountdownAb: 60,            // so viele Sekunden vor Beginn erscheint der Countdown
+  kleineUhrInDerEcke: true,         // true = Restzeit steht zusätzlich dauerhaft unten rechts
+  schlussTitel: "Herzlich willkommen",
+  schlussText: "Der Gottesdienst beginnt"
+};
+
+/* Jede Ansage ist ein Block in geschweiften Klammern.
+   rubrik = kleines Schlagwort, titel = Überschrift,
+   wann = Datum/Uhrzeit/Ort (darf leer sein), text = ein, zwei Sätze. */
+const ANSAGEN = [
+  {
+    rubrik: "Willkommen",
+    titel: "Schön, dass du da bist",
+    wann: "",
+    text: "Nimm dir einen Kaffee, such dir einen Platz – wir fangen gleich an."
+  },
+  {
+    // Ü60 findet nicht jede Woche statt:
+    // anzeigen: false blendet die Folie aus, bibelstelle darf leer bleiben ("").
+    anzeigen: true,
+    rubrik: "Montag",
+    titel: "Ü60",
+    wann: "Montag · 16:00 Uhr",
+    bibelstelle: "Matthäus 1",
+    text: "Der Treff für alle über 60."
+  },
+  {
+    rubrik: "Dienstag",
+    titel: "Kleingruppen & Bibelstunde",
+    wann: "Dienstags · 19:00 Uhr · im wöchentlichen Wechsel",
+    text: "Eine Woche treffen sich die Hauskreise, in der nächsten ist Bibelstunde."
+  },
+  {
+    // Mehrere Termine auf einer Folie: jede Zeile der liste ist
+    // "Uhrzeit | Name | Zusatz" – der Zusatz darf fehlen.
+    // Fällt etwas aus, hänge einen vierten Teil an, z. B.
+    //   "18:00 Uhr | Teenkreis | 11 bis 15 Jahre | fällt aus"
+    // Bei einer normalen Folie geht dasselbe mit der Zeile
+    //   ausfall: "Fällt diese Woche aus",
+    rubrik: "Freitag",
+    titel: "Freitags bei uns",
+    liste: [
+      "18:00 Uhr | Gebet",
+      "18:00 Uhr | Jungschar | 8 bis 11 Jahre",
+      "18:00 Uhr | Teenkreis | 11 bis 15 Jahre",
+      "20:00 Uhr | Jugend | ab 15 Jahren"
+    ]
+  },
+  {
+    // Folie mit Flyer rechts neben dem Text.
+    // Die Bilddatei liegt im selben Ordner wie ansagen.html.
+    anzeigen: true,                 // auf true stellen, um die Folie zu zeigen
+    rubrik: "Besonderes",
+    titel: "Titel der Veranstaltung",
+    wann: "Samstag, 5. Dezember · 15:00 Uhr",
+    text: "Ein kurzer Satz dazu.",
+    bild: "beispiel-flyer.svg"
+  },
+  {
+    // Folie, die nur aus dem Flyer besteht (füllt den ganzen Bildschirm).
+    anzeigen: true,                 // auf true stellen, um die Folie zu zeigen
+    bild: "beispiel-flyer.svg",
+    bildGross: true
+  },
+  {
+    rubrik: "Sonntag",
+    titel: "Gebet & Gottesdienst",
+    wann: "Sonntags · 9:30 Uhr Gebet · 10:00 Uhr Gottesdienst",
+    text: "Am ersten Sonntag im Monat beginnt der Gottesdienst schon um 9:30 Uhr – ohne Gebet davor."
+  }
+];
+</script>
+<style>
+  :root {
+    --grund: #12161d;
+    --text: #f3efe6;
+    --leise: #a9b0bb;
+    --akzent: #e9bd72;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #000; overflow: hidden; }
+  body.ruhig { cursor: none; }
+
+  /* Bühne: fest 1920×1080, wird per Skript auf den Bildschirm skaliert */
+  #buehne {
+    position: absolute; left: 50%; top: 50%;
+    width: 1920px; height: 1080px;
+    transform-origin: 0 0;
+    background: var(--grund);
+    color: var(--text);
+    font-family: var(--sans);
+    overflow: hidden;
+  }
+
+  /* Ruhig wandernde Lichtflächen im Hintergrund */
+  .licht { position: absolute; border-radius: 50%; filter: blur(140px); opacity: .5; }
+  .licht.a { width: 1100px; height: 1100px; left: -300px; top: -400px; background: #2b4a63;
+             animation: wandern-a 46s ease-in-out infinite alternate; }
+  .licht.b { width: 900px; height: 900px; right: -250px; bottom: -350px; background: #6b4a2a;
+             animation: wandern-b 58s ease-in-out infinite alternate; }
+  @keyframes wandern-a { to { transform: translate(380px, 260px) scale(1.15); } }
+  @keyframes wandern-b { to { transform: translate(-420px, -220px) scale(1.2); } }
+
+  #kopf {
+    position: absolute; left: 120px; top: 84px;
+    font-size: 30px; letter-spacing: .22em; text-transform: uppercase; color: var(--leise);
+  }
+
+  .folie {
+    position: absolute; left: 120px; right: 120px; top: 230px; bottom: 300px;
+    display: flex; flex-direction: column; justify-content: center;
+    opacity: 0; transition: opacity 1.4s ease;
+  }
+  .folie.aktiv { opacity: 1; }
+  .folie > * { transform: translateY(26px); transition: transform 1.6s cubic-bezier(.2,.7,.2,1); }
+  .folie.aktiv > * { transform: none; }
+  .folie.aktiv > :nth-child(2) { transition-delay: .08s; }
+  .folie.aktiv > :nth-child(3) { transition-delay: .16s; }
+  .folie.aktiv > :nth-child(4) { transition-delay: .24s; }
+
+  .rubrik {
+    align-self: flex-start;
+    font-size: 28px; font-weight: 600; letter-spacing: .2em; text-transform: uppercase;
+    color: var(--akzent);
+    padding-bottom: 18px; margin-bottom: 40px;
+    border-bottom: 3px solid var(--akzent);
+  }
+  .titel {
+    font-family: var(--serif); font-weight: 500;
+    font-size: 132px; line-height: 1.04; letter-spacing: -.01em;
+    max-width: 1500px; text-wrap: balance;
+  }
+  .wann { margin-top: 44px; font-size: 40px; font-weight: 600; color: var(--akzent); }
+  .stelle { margin-top: 30px; font-family: var(--serif); font-style: italic; font-size: 60px; }
+  .folie.aktiv > :nth-child(5) { transition-delay: .32s; }
+  .text { margin-top: 28px; font-size: 46px; line-height: 1.35; color: var(--leise); max-width: 1300px; }
+
+  /* Folie mit mehreren Terminen untereinander */
+  .kompakt .rubrik { margin-bottom: 28px; }
+  .kompakt .titel { font-size: 96px; }
+  .liste {
+    margin-top: 44px; display: grid; grid-template-columns: auto auto 1fr;
+    column-gap: 56px; row-gap: 18px; align-items: baseline;
+  }
+  .liste .zeit { font-size: 40px; font-weight: 600; color: var(--akzent); font-variant-numeric: tabular-nums; }
+  .liste .name { font-family: var(--serif); font-size: 56px; }
+  .liste .notiz { font-size: 40px; color: var(--leise); }
+
+  /* Termin fällt aus: Hinweis-Marke, Termin durchgestrichen */
+  .ausfall {
+    display: inline-block; align-self: flex-start;
+    font-family: var(--sans); font-size: 34px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: #12161d; background: #f08a6c; padding: 10px 24px; border-radius: 10px;
+  }
+  .folie > .ausfall { margin-top: 36px; font-size: 40px; }
+  .abgesagt .titel, .liste .aus { text-decoration: line-through; text-decoration-thickness: 3px; opacity: .45; }
+  .abgesagt .wann, .abgesagt .stelle { opacity: .45; }
+  .abgesagt .titel { font-size: 104px; }
+
+  /* Folie mit Flyer rechts neben dem Text */
+  .bild { display: flex; align-items: center; justify-content: center;
+          font-size: 34px; color: var(--leise); text-align: center; }
+  .bild img { max-width: 100%; max-height: 100%; border-radius: 14px; box-shadow: 0 30px 80px #0009; }
+  .mitbild { padding-right: 740px; }
+  .mitbild .titel { font-size: 100px; }
+  .mitbild .bild { position: absolute; right: 0; top: -100px; bottom: -60px; width: 660px; }
+
+  /* Folie, die nur aus dem Flyer besteht */
+  .nurbild { left: 0; right: 0; top: 0; bottom: 0; }
+  .nurbild .bild { position: absolute; inset: 0; }
+  .nurbild .bild img { border-radius: 0; box-shadow: none; }
+  #kopf { transition: opacity 1s; }
+  #buehne.flyer #kopf { opacity: 0; }
+
+  /* Fuß: Punkte links, Countdown rechts */
+  #punkte { position: absolute; left: 120px; bottom: 112px; display: flex; gap: 16px; }
+  #punkte i { width: 14px; height: 14px; border-radius: 50%; background: #ffffff2b; transition: all .6s; }
+  #punkte i.an { width: 56px; border-radius: 7px; background: var(--akzent); }
+
+  #uhr {
+    position: absolute; right: 120px; bottom: 84px; text-align: right;
+    transition: opacity 1s;
+  }
+  #uhr span { display: block; font-size: 28px; letter-spacing: .18em; text-transform: uppercase; color: var(--leise); }
+  #uhr strong {
+    display: block; margin-top: 6px;
+    font-size: 108px; font-weight: 300; line-height: 1;
+    font-variant-numeric: tabular-nums; letter-spacing: -.01em;
+  }
+
+  #balken { position: absolute; left: 0; bottom: 0; height: 6px; width: 100%; background: #ffffff14; }
+  #balken b { display: block; height: 100%; width: 0; background: var(--akzent); }
+  #balken b.laeuft { animation: fuellen linear forwards; }
+  @keyframes fuellen { to { width: 100%; } }
+
+  /* Letzte Sekunden und Schlussbild */
+  #gross {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: #12161df2;
+    opacity: 0; pointer-events: none; transition: opacity 1.6s ease;
+    text-align: center;
+  }
+  #gross.an { opacity: 1; }
+  #gross span { font-size: 40px; letter-spacing: .24em; text-transform: uppercase; color: var(--akzent); }
+  #gross strong {
+    font-size: 520px; font-weight: 200; line-height: 1; margin-top: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+  #gross.ende strong { font-family: var(--serif); font-weight: 500; font-size: 170px; line-height: 1.1; margin: 30px 0 34px; }
+  #gross em { font-style: normal; font-size: 52px; color: var(--leise); display: none; }
+  #gross.ende em { display: block; }
+  #gross.ende span { display: none; }
+
+  #hinweis {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+    font: 15px var(--sans); color: #fff; background: #000a; padding: 8px 16px; border-radius: 20px;
+    transition: opacity .6s;
+  }
+  body.ruhig #hinweis { opacity: 0; }
+</style>
+</head>
+<body>
+<div id="buehne">
+  <div class="licht a"></div>
+  <div class="licht b"></div>
+  <div id="kopf"></div>
+  <div id="folien"></div>
+  <div id="punkte"></div>
+  <div id="uhr"><span>Gottesdienst beginnt in</span><strong id="uhrzeit">–:––</strong></div>
+  <div id="balken"><b></b></div>
+  <div id="gross"><span>Gleich geht's los</span><strong id="grosszahl"></strong><em id="schlusstext"></em></div>
+</div>
+<div id="hinweis">Taste F oder Doppelklick: Vollbild · Pfeiltasten: Folie wechseln</div>
+
+<script>
+(function () {
+  const E = EINSTELLUNGEN;
+  const $ = id => document.getElementById(id);
+  const buehne = $("buehne");
+
+  /* ---- Bühne auf den Bildschirm skalieren ---- */
+  function skalieren() {
+    const s = Math.min(innerWidth / 1920, innerHeight / 1080);
+    buehne.style.transform = `scale(${s}) translate(-50%, -50%)`;
+  }
+  addEventListener("resize", skalieren);
+  skalieren();
+
+  /* ---- Folien aufbauen ---- */
+  $("kopf").textContent = E.gemeinde;
+  $("schlusstext").textContent = E.schlussText;
+  const folien = ANSAGEN.filter(a => a.anzeigen !== false).map(a => {
+    const f = document.createElement("section");
+    f.className = "folie";
+    if (a.ausfall) f.classList.add("abgesagt");    // ganze Folie: Termin fällt aus
+    [["rubrik", a.rubrik], ["titel", a.titel], ["ausfall", a.ausfall], ["wann", a.wann], ["stelle", a.bibelstelle], ["text", a.text]].forEach(([k, v]) => {
+      if (!v) return;
+      const el = document.createElement("div");
+      el.className = k; el.textContent = v;
+      f.appendChild(el);
+    });
+    if (a.liste && a.liste.length) {               // mehrere Termine untereinander
+      f.classList.add("kompakt");
+      const l = document.createElement("div");
+      l.className = "liste";
+      a.liste.forEach(zeile => {
+        const teile = zeile.split("|").map(t => t.trim());
+        const aus = teile[3];                      // 4. Teil = Ausfall-Hinweis
+        ["zeit", "name", "notiz"].forEach((k, i) => {
+          const el = document.createElement("span");
+          el.className = k + (aus ? " aus" : "");
+          el.textContent = teile[i] || "";
+          if (aus && k === "notiz") {
+            el.className = "notiz";
+            el.textContent = "";
+            const marke = document.createElement("b");
+            marke.className = "ausfall"; marke.textContent = aus;
+            el.appendChild(marke);
+          }
+          l.appendChild(el);
+        });
+      });
+      f.appendChild(l);
+    }
+    if (a.bild) {                                  // Flyer / Bild
+      f.classList.add(a.bildGross ? "nurbild" : "mitbild");
+      const rahmen = document.createElement("div");
+      rahmen.className = "bild";
+      const img = document.createElement("img");
+      img.alt = "";
+      img.onerror = () => { rahmen.textContent = "Bild nicht gefunden: " + a.bild; };
+      img.src = a.bild;
+      rahmen.appendChild(img);
+      f.appendChild(rahmen);
+    }
+    $("folien").appendChild(f);
+    $("punkte").appendChild(document.createElement("i"));
+    return f;
+  });
+  const punkte = [...$("punkte").children];
+  const balken = document.querySelector("#balken b");
+
+  let nr = -1, takt = null;
+  function zeige(i) {
+    nr = (i + folien.length) % folien.length;
+    folien.forEach((f, k) => f.classList.toggle("aktiv", k === nr));
+    punkte.forEach((p, k) => p.classList.toggle("an", k === nr));
+    buehne.classList.toggle("flyer", folien[nr].classList.contains("nurbild"));
+    balken.classList.remove("laeuft");
+    void balken.offsetWidth;                       // Animation neu starten
+    balken.style.animationDuration = E.sekundenProFolie + "s";
+    balken.classList.add("laeuft");
+    clearTimeout(takt);
+    takt = setTimeout(() => zeige(nr + 1), E.sekundenProFolie * 1000);
+  }
+  zeige(0);
+
+  /* ---- Zielzeit bestimmen ----
+     Zum Ausprobieren: ansagen.html?in=90 zählt 90 Sekunden herunter. */
+  const probe = new URLSearchParams(location.search).get("in");
+  const NACHLAUF = 3 * 3600 * 1000;                // Schlussbild bleibt 3 Stunden stehen
+  let festesZiel = probe ? Date.now() + Number(probe) * 1000 : null;
+
+  const zz = n => String(n).padStart(2, "0");
+
+  // Setzt an einem Tag die passende Uhrzeit: normal oder der frühere Beginn
+  function mitUhrzeit(tag) {
+    const datum = `${tag.getFullYear()}-${zz(tag.getMonth() + 1)}-${zz(tag.getDate())}`;
+    const frueh = (E.frueherAnTerminen || []).includes(datum) ||
+                  (E.frueherAmSonntagNr > 0 && Math.ceil(tag.getDate() / 7) === E.frueherAmSonntagNr);
+    const [h, m] = (frueh ? E.frueherBeginn : E.beginn).split(":").map(Number);
+    const z = new Date(tag);
+    z.setHours(h, m, 0, 0);
+    return z;
+  }
+
+  function ziel() {
+    if (festesZiel) return festesZiel;
+    const jetzt = new Date();
+    const tag = new Date(jetzt);
+    tag.setDate(tag.getDate() + ((E.wochentag - tag.getDay() + 7) % 7));
+    let z = mitUhrzeit(tag);
+    if (jetzt - z > NACHLAUF) { tag.setDate(tag.getDate() + 7); z = mitUhrzeit(tag); }
+    return z.getTime();
+  }
+
+  if (!E.kleineUhrInDerEcke) $("uhr").style.display = "none";
+
+  function tick() {
+    const rest = Math.ceil((ziel() - Date.now()) / 1000);
+    const gross = $("gross");
+    if (rest <= 0) {
+      gross.classList.add("an", "ende");
+      $("grosszahl").textContent = E.schlussTitel;
+      $("uhr").style.opacity = 0;
+      return;
+    }
+    gross.classList.remove("ende");
+    const h = Math.floor(rest / 3600), m = Math.floor(rest % 3600 / 60), s = rest % 60;
+    $("uhrzeit").textContent = h ? `${h}:${zz(m)}:${zz(s)}` : `${m}:${zz(s)}`;
+    const letzte = rest <= E.grosserCountdownAb;
+    gross.classList.toggle("an", letzte);
+    $("uhr").style.opacity = letzte ? 0 : 1;
+    if (letzte) $("grosszahl").textContent = rest;
+  }
+  tick();
+  setInterval(tick, 250);
+
+  /* ---- Bedienung ---- */
+  function vollbild() {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen();
+  }
+  addEventListener("dblclick", vollbild);
+  addEventListener("keydown", e => {
+    if (e.key === "f" || e.key === "F") vollbild();
+    if (e.key === "ArrowRight") zeige(nr + 1);
+    if (e.key === "ArrowLeft") zeige(nr - 1);
+  });
+  let ruhe;
+  function wach() {
+    document.body.classList.remove("ruhig");
+    clearTimeout(ruhe);
+    ruhe = setTimeout(() => document.body.classList.add("ruhig"), 3000);
+  }
+  addEventListener("mousemove", wach);
+  wach();
+})();
+</script>
+</body>
+</html>
