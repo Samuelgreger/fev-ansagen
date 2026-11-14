@@ -4,7 +4,8 @@
    Liefert die Dateien dieses Ordners an den Browser aus und schreibt beim
    Speichern die Datei ansagen-daten.js. Läuft nur auf diesem Rechner
    (127.0.0.1) und braucht nichts außer Node.js – keine weiteren Pakete.
-   Gestartet wird er per Doppelklick auf „Ansagen bearbeiten.command“. */
+   Gestartet wird er per Doppelklick auf „Ansagen bearbeiten.command“ (Mac)
+   oder „Ansagen bearbeiten.cmd“ (Windows). */
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
@@ -33,7 +34,8 @@ const DATEITYPEN = {
 
 const KOPF = `/* Inhalte und Einstellungen der Ansagen-Seite.
    Diese Datei wird von „Ansagen bearbeiten“ geschrieben – am einfachsten
-   änderst du alles dort (Doppelklick auf „Ansagen bearbeiten.command“).
+   änderst du alles dort (Doppelklick auf „Ansagen bearbeiten.command“ am Mac
+   oder „Ansagen bearbeiten.cmd“ unter Windows).
    Sie muss im selben Ordner liegen wie ansagen.html. */
 `;
 
@@ -87,7 +89,7 @@ function liefereDatei(res, pfad) {
     return fehler(res, 400);
   }
   // Keine versteckten Dateien und nichts außerhalb dieses Ordners.
-  if (teile.some((t) => t.startsWith(".") || t.includes("\\") || t.includes("\0"))) return fehler(res, 404);
+  if (teile.some((t) => t.startsWith(".") || /[\\:\0]/.test(t))) return fehler(res, 404);
   const datei = path.join(ORDNER, ...teile);
   fs.readFile(datei, (err, inhalt) => {
     if (err) return fehler(res, 404);
@@ -199,8 +201,8 @@ function lausche(server, port) {
 
 function imBrowserOeffnen(adresse) {
   if (process.env.ANSAGEN_KEIN_BROWSER === "1") return;
-  const befehl = process.platform === "darwin" ? "open" : process.platform === "win32" ? "explorer" : "xdg-open";
-  execFile(befehl, [adresse], () => {});
+  if (process.platform === "win32") return execFile("cmd", ["/c", "start", "", adresse], () => {});
+  execFile(process.platform === "darwin" ? "open" : "xdg-open", [adresse], () => {});
 }
 
 async function main() {

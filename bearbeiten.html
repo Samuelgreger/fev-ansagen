@@ -269,8 +269,8 @@
     } catch (fehler) {
       status("Nicht gespeichert", "fehler");
       banner(ohneServer()
-        ? "Speichern geht nur, wenn du diese Seite über „Ansagen bearbeiten.command“ gestartet hast (Doppelklick im Ordner)."
-        : "Speichern hat nicht geklappt. Läuft das Terminal-Fenster von „Ansagen bearbeiten“ noch? Wenn nicht: „Ansagen bearbeiten.command“ erneut doppelklicken und dann noch einmal speichern. (" + fehler.message + ")");
+        ? "Speichern geht nur, wenn du diese Seite über die Start-Datei „Ansagen bearbeiten“ gestartet hast (Doppelklick im Ordner)."
+        : "Speichern hat nicht geklappt. Läuft das Terminal-Fenster von „Ansagen bearbeiten“ noch? Wenn nicht: die Start-Datei „Ansagen bearbeiten“ erneut doppelklicken und dann noch einmal speichern. (" + fehler.message + ")");
     }
   }
   const ohneServer = () => location.protocol === "file:";
@@ -446,7 +446,7 @@
     form.append(h("div", { class: "karte" },
       h("div", { class: "ueber" }, "Flyer / Bild"),
       bildwahl, datei,
-      taste("Bild vom Mac hinzufügen …", "Kopiert ein Bild in den Ansagen-Ordner und wählt es aus", () => datei.click()),
+      taste("Bild vom Rechner hinzufügen …", "Kopiert ein Bild in den Ansagen-Ordner und wählt es aus", () => datei.click()),
       f.bild ? h("div", { class: "wahlreihe" }, lage(false, "Rechts neben dem Text"), lage(true, "Bildschirmfüllend (nur das Bild)")) : null));
   }
 
@@ -463,7 +463,7 @@
       zeichneFormular();
     } catch (fehler) {
       banner(ohneServer()
-        ? "Bilder hinzufügen geht nur, wenn du diese Seite über „Ansagen bearbeiten.command“ gestartet hast."
+        ? "Bilder hinzufügen geht nur, wenn du diese Seite über die Start-Datei „Ansagen bearbeiten“ gestartet hast."
         : "Das Bild konnte nicht hinzugefügt werden: " + fehler.message);
     }
   }
@@ -524,7 +524,7 @@
   zeichneFormular();
   vorschau();
   if (ohneServer()) {
-    banner("Du hast diese Seite direkt geöffnet – so kann sie nicht speichern. Bitte im Ordner „Ansagen bearbeiten.command“ doppelklicken.");
+    banner("Du hast diese Seite direkt geöffnet – so kann sie nicht speichern. Bitte im Ordner die Start-Datei „Ansagen bearbeiten“ doppelklicken.");
   } else {
     fetch("/api/bilder").then(r => r.json()).then(d => { bilder = d.bilder || []; if (ansicht === "folien") zeichneFormular(); }).catch(() => {});
   }

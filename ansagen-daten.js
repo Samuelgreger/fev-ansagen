@@ -1,6 +1,7 @@
 /* Inhalte und Einstellungen der Ansagen-Seite.
    Diese Datei wird von „Ansagen bearbeiten“ geschrieben – am einfachsten
-   änderst du alles dort (Doppelklick auf „Ansagen bearbeiten.command“).
+   änderst du alles dort (Doppelklick auf „Ansagen bearbeiten.command“ am Mac
+   oder „Ansagen bearbeiten.cmd“ unter Windows).
    Sie muss im selben Ordner liegen wie ansagen.html. */
 
 const EINSTELLUNGEN = {
@@ -19,10 +20,16 @@ const EINSTELLUNGEN = {
 
 const ANSAGEN = [
   {
+    "anzeigen": true,
     "rubrik": "Willkommen",
     "titel": "Schön, dass du da bist",
-    "wann": "",
     "text": "Nimm dir einen Kaffee, such dir einen Platz – wir fangen gleich an."
+  },
+  {
+    "anzeigen": true,
+    "rubrik": "Test",
+    "bild": "vergleich-dlq.svg",
+    "bildGross": true
   },
   {
     "anzeigen": true,
@@ -34,13 +41,14 @@ const ANSAGEN = [
   },
   {
     "anzeigen": false,
-    "ausfall": "Fällt diese Woche aus",
     "rubrik": "Dienstag",
     "titel": "Kleingruppen & Bibelstunde",
     "wann": "Dienstags · 19:00 Uhr · im wöchentlichen Wechsel",
-    "text": "Eine Woche treffen sich die Hauskreise, in der nächsten ist Bibelstunde."
+    "text": "Eine Woche treffen sich die Hauskreise, in der nächsten ist Bibelstunde.",
+    "ausfall": "Fällt diese Woche aus"
   },
   {
+    "anzeigen": true,
     "rubrik": "Freitag",
     "titel": "Freitags bei uns",
     "liste": [
@@ -60,10 +68,18 @@ const ANSAGEN = [
   },
   {
     "anzeigen": true,
+    "rubrik": "Hallo",
+    "titel": "title",
+    "wann": "14 uhr",
+    "bibelstelle": "7 math",
+    "liste": [
+      "4 | name | sdsf | fällt aus"
+    ],
     "bild": "beispiel-flyer.svg",
     "bildGross": true
   },
   {
+    "anzeigen": true,
     "rubrik": "Sonntag",
     "titel": "Gebet & Gottesdienst",
     "wann": "Sonntags · 9:30 Uhr Gebet · 10:00 Uhr Gottesdienst",
