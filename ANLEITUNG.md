@@ -34,8 +34,8 @@ Fertig? Terminal-Fenster schließen.
 - Alle Inhalte stehen in **`ansagen-daten.js`**. Diese Datei, `ansagen.html` und die Bilder müssen im selben Ordner liegen.
 - Vor jedem Speichern wird der vorherige Stand als `ansagen-daten.sicherung.js` aufgehoben. Ging etwas schief:
   `ansagen-daten.js` löschen und die Sicherung in `ansagen-daten.js` umbenennen.
-- Zum Bearbeiten wird Python 3 gebraucht. Falls beim ersten Start ein Fenster fragt, ob die
-  „Command Line Developer Tools“ installiert werden sollen: einmal bestätigen, danach erneut doppelklicken.
+- Zum Bearbeiten wird Node.js gebraucht (JavaScript außerhalb des Browsers). Fehlt es auf einem Mac,
+  einmalig von https://nodejs.org installieren (Version „LTS“), danach erneut doppelklicken.
 - Meldet der Mac beim ersten Doppelklick, die Datei könne nicht geöffnet werden (z. B. nach einem Download):
   Rechtsklick auf `Ansagen bearbeiten.command` → **Öffnen** → **Öffnen**.
 - Das Bearbeiten läuft nur auf diesem Mac (Adresse `127.0.0.1`), nichts geht ins Internet.
