@@ -7,6 +7,10 @@ alle Texte und alle Bilder. Es muss nichts installiert werden, und es braucht ke
 
 1. Doppelklick auf **`Ansagen.html`**. Die Ansagen laufen sofort.
 2. Taste **F** (oder Doppelklick auf die Seite) schaltet auf Vollbild.
+   Ist ein zweiter Bildschirm (Beamer) angeschlossen, erscheint das Vollbild gleich dort
+   (Windows mit Edge oder Chrome). Beim ersten Mal fragt der Browser, ob die Seite Fenster auf
+   allen Bildschirmen verwalten darf – **Zulassen** klicken und, falls nötig, noch einmal **F** drücken.
+   In Safari am Mac geht das nicht: dort das Fenster auf den Beamer ziehen und dann **F** drücken.
 
 Der Countdown richtet sich nach der Uhr des Rechners. In den letzten 60 Sekunden wird groß
 heruntergezählt, danach steht das Schlussbild.

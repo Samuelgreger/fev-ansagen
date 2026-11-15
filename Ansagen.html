@@ -458,10 +458,25 @@ document.body.append(anzeigeEl, werkstatt);
 const live = Buehne(anzeigeEl.firstChild);
 let aktuellerModus = null, wachSperre = null;
 
+/* Vollbild. Ist ein zweiter Bildschirm (Beamer) angeschlossen, geht die Anzeige dorthin –
+   das können Edge und Chrome, und sie fragen beim ersten Mal um Erlaubnis. Sonst: dieser Bildschirm. */
 function vollbild() {
   const d = document, el = d.documentElement;
-  if (d.fullscreenElement || d.webkitFullscreenElement) (d.exitFullscreen || d.webkitExitFullscreen).call(d);
-  else (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+  if (d.fullscreenElement || d.webkitFullscreenElement) return (d.exitFullscreen || d.webkitExitFullscreen).call(d);
+  const an = ziel => (el.requestFullscreen || el.webkitRequestFullscreen).call(el, ziel ? { screen: ziel } : undefined);
+  if (!screen.isExtended || !window.getScreenDetails) return an();
+  getScreenDetails()
+    .then(alle => {
+      const zweite = alle.screens.filter(s => !s.isPrimary);
+      return an(zweite.find(s => !s.isInternal) || zweite[0]);
+    }, () => an())   // Erlaubnis abgelehnt: Vollbild auf diesem Bildschirm
+    .catch(() => {
+      // Über der Erlaubnis-Frage ist der Tastendruck verfallen – der nächste klappt.
+      const text = leiste.firstChild.textContent;
+      leiste.firstChild.textContent = "Bitte noch einmal F drücken";
+      setTimeout(() => { leiste.firstChild.textContent = text; }, 6000);
+      wach();
+    });
 }
 let ruheTakt;
 function wach() {
@@ -565,7 +580,7 @@ function bearbeitenAufbauen() {
   werkstatt.replaceChildren(
     h("header", {}, h("h1", {}, "Ansagen bearbeiten"), h("div", { class: "reiter" }, rf, re), standEl,
       knopf("Probelauf", () => modus("anzeige", 90), { titel: "Zeigt die Anzeige und zählt 90 Sekunden herunter" }),
-      knopf("Anzeige starten", () => modus("anzeige")),
+      knopf("Anzeige starten", () => { modus("anzeige"); if (screen.isExtended) vollbild(); }),
       knopf("Speichern", speichern, { klasse: "haupt" })),
     h("div", { class: "spalten" },
       h("div", { id: "liste" }),
