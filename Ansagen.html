@@ -1,0 +1,887 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Ansagen</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style id="stil">
+/* ===================================================================
+   Ansagen – eine einzige Datei: Anzeige, Bearbeiten, Inhalte und Bilder.
+   Teil 1: die Bühne (das, was der Beamer zeigt) · Teil 2: das Bearbeiten
+   =================================================================== */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #000; }
+[hidden] { display: none !important; }
+
+/* ---------- Teil 1: Bühne, fest 1920×1080, wird auf ihren Rahmen skaliert ---------- */
+.rahmen { position: relative; overflow: hidden; background: #000; }
+.buehne {
+  --grund: #10141b; --grund2: #1b2a3a; --grund3: #4a3520;
+  --text: #f4efe4; --leise: #aab2bf; --akzent: #e6b869; --linie: #ffffff22;
+  --warn: #f08a6c; --warntext: #1a1210; --fuss: #0a0d12b0;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Constantia, Georgia, serif;
+  position: absolute; left: 50%; top: 50%; width: 1920px; height: 1080px;
+  background: var(--grund); color: var(--text); overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+.buehne.morgen {
+  --grund: #f5efe3; --grund2: #ffffff; --grund3: #ecd9b8;
+  --text: #1c232e; --leise: #566170; --akzent: #9c4f1c; --linie: #1c232e22;
+  --warn: #b93a26; --warntext: #fff; --fuss: #ffffff8c;
+}
+.licht { position: absolute; border-radius: 50%; }
+.licht.a { width: 1700px; height: 1700px; left: -600px; top: -800px;
+  background: radial-gradient(closest-side, var(--grund2), transparent); animation: wandern-a 50s ease-in-out infinite alternate; }
+.licht.b { width: 1500px; height: 1500px; right: -500px; bottom: -700px; opacity: .8;
+  background: radial-gradient(closest-side, var(--grund3), transparent); animation: wandern-b 64s ease-in-out infinite alternate; }
+@keyframes wandern-a { to { transform: translate(420px, 260px) scale(1.15); } }
+@keyframes wandern-b { to { transform: translate(-460px, -220px) scale(1.2); } }
+.still .licht, .still .bildflaeche img { animation: none !important; }
+
+.folie { position: absolute; left: 0; top: 0; width: 1920px; height: 930px; opacity: 0; transition: opacity 1.3s ease; }
+.folie.aktiv { opacity: 1; }
+.inhalt {
+  position: absolute; left: 130px; top: 80px; width: 1660px; height: 790px;
+  display: flex; flex-direction: column; justify-content: center;
+  font-size: calc(40px * var(--f, 1));           /* --f verkleinert alles, wenn der Text sonst nicht passt */
+}
+.satz > * { transform: translateY(28px); opacity: 0; transition: transform 1.5s cubic-bezier(.2,.7,.2,1), opacity 1.2s ease; }
+.folie.aktiv .satz > * { transform: none; opacity: 1; }
+.folie.aktiv .satz > :nth-child(2) { transition-delay: .10s; }
+.folie.aktiv .satz > :nth-child(3) { transition-delay: .20s; }
+.folie.aktiv .satz > :nth-child(4) { transition-delay: .30s; }
+.folie.aktiv .satz > :nth-child(5) { transition-delay: .40s; }
+.folie.aktiv .satz > :nth-child(n+6) { transition-delay: .50s; }
+.still .folie, .still .satz > * { transition: none; }
+
+.rubrik { display: inline-block; font-size: .7em; font-weight: 600; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--akzent); padding-bottom: .6em; margin-bottom: 1.3em; border-bottom: 3px solid var(--akzent); }
+.titel { font-family: var(--serif); font-weight: 500; font-size: 3.3em; line-height: 1.05; letter-spacing: -.01em;
+  text-wrap: balance; overflow-wrap: break-word; hyphens: auto; }
+.wann { margin-top: 1.05em; font-size: 1.05em; font-weight: 600; color: var(--akzent); }
+.stelle { margin-top: .55em; font-family: var(--serif); font-style: italic; font-size: 1.5em; }
+.text { margin-top: .65em; font-size: 1.15em; line-height: 1.36; color: var(--leise); max-width: 34em; white-space: pre-line; }
+.kompakt .titel { font-size: 2.4em; }
+.kompakt .rubrik { margin-bottom: .9em; }
+.termine { margin-top: 1.1em; display: grid; grid-template-columns: auto auto 1fr; column-gap: 1.4em; row-gap: .42em; align-items: baseline; }
+.termine .zeit { font-weight: 600; color: var(--akzent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.termine .name { font-family: var(--serif); font-size: 1.4em; }
+.termine .notiz { color: var(--leise); }
+.termine .aus { text-decoration: line-through; text-decoration-thickness: .07em; opacity: .45; }
+
+.marke { display: inline-block; font-size: .85em; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--warntext); background: var(--warn); padding: .28em .7em; border-radius: .3em; }
+.satz > .marke { margin-top: .9em; font-size: 1em; align-self: flex-start; }
+.abgesagt .titel { text-decoration: line-through; text-decoration-thickness: .05em; opacity: .45; font-size: 2.6em; }
+.abgesagt .wann, .abgesagt .stelle, .abgesagt .text, .abgesagt .termine { opacity: .45; }
+
+/* Bild rechts neben dem Text */
+.art-seite .inhalt { width: 960px; }
+.art-seite .bildflaeche { position: absolute; left: 1150px; top: 70px; width: 660px; height: 800px;
+  display: flex; align-items: center; justify-content: center; }
+.art-seite .bild { max-width: 100%; max-height: 100%; border-radius: 16px; box-shadow: 0 30px 80px #0008; }
+/* Bild füllt die ganze Folie; hinter dem Bild liegt dasselbe Bild weichgezeichnet statt schwarzer Balken */
+.art-voll .bildflaeche { position: absolute; inset: 0; overflow: hidden; background: #000; }
+.art-voll .weich { position: absolute; inset: -80px; width: calc(100% + 160px); height: calc(100% + 160px);
+  object-fit: cover; filter: blur(50px) brightness(.55); }
+.art-voll .bild { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+/* Bild als Hintergrund hinter dem Text */
+.art-hinter { --text: #f4efe4; --leise: #d5d9df; --akzent: #f0c67c; color: var(--text); }
+.art-hinter .bildflaeche { position: absolute; inset: 0; overflow: hidden; background: #000; }
+.art-hinter .bild { width: 100%; height: 100%; object-fit: cover; }
+.art-hinter.aktiv .bild { animation: zoom 40s ease-out forwards; }
+@keyframes zoom { from { transform: scale(1); } to { transform: scale(1.12); } }
+.art-hinter .bildflaeche::after { content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, #080b10ee 0%, #080b10b8 45%, #080b1055 100%); }
+.art-hinter .inhalt { text-shadow: 0 2px 24px #000a; }
+
+/* Fuß: Gemeinde, Punkte, Countdown */
+.fuss { position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: var(--fuss);
+  border-top: 1px solid var(--linie); display: flex; align-items: center; padding: 0 130px; gap: 60px; }
+.gemeinde { font-size: 28px; letter-spacing: .22em; text-transform: uppercase; color: var(--leise); white-space: nowrap; }
+.punkte { flex: 1; display: flex; gap: 14px; justify-content: center; }
+.punkte i { width: 12px; height: 12px; border-radius: 6px; background: var(--linie); transition: all .6s; }
+.punkte i.an { width: 52px; background: var(--akzent); }
+.uhr { display: flex; align-items: baseline; gap: 26px; transition: opacity 1s; }
+.uhr span { font-size: 26px; letter-spacing: .16em; text-transform: uppercase; color: var(--leise); white-space: nowrap; }
+.uhr strong { font-size: 92px; font-weight: 300; line-height: 1; font-variant-numeric: tabular-nums; min-width: 3.2ch; text-align: right; }
+.balken { position: absolute; left: 0; bottom: 0; height: 6px; width: 100%; }
+.balken b { display: block; height: 100%; width: 0; background: var(--akzent); }
+.balken b.laeuft { animation: fuellen linear forwards; }
+.balken b.halt { animation-play-state: paused; }
+@keyframes fuellen { to { width: 100%; } }
+.pause { position: absolute; right: 40px; top: 30px; font-size: 22px; letter-spacing: .1em; color: var(--leise); }
+
+/* Die letzten Sekunden und das Schlussbild */
+.gross { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: var(--grund); opacity: 0; pointer-events: none; transition: opacity 1.6s ease; text-align: center; }
+.gross.an { opacity: 1; }
+.gross .licht { opacity: .9; }
+.gross svg { position: absolute; left: 50%; top: 50%; width: 900px; height: 900px; margin: -450px 0 0 -450px; transform: rotate(-90deg); }
+.gross circle { fill: none; stroke-width: 6; }
+.gross .spur { stroke: var(--linie); }
+.gross .ring { stroke: var(--akzent); stroke-linecap: round; transition: stroke-dashoffset 1s linear; }
+.gross span { position: relative; font-size: 38px; letter-spacing: .24em; text-transform: uppercase; color: var(--akzent); }
+.gross strong { position: relative; font-size: 440px; font-weight: 200; line-height: 1; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.gross em { position: relative; font-style: normal; font-size: 54px; color: var(--leise); display: none; }
+.gross.ende svg, .gross.ende span { display: none; }
+.gross.ende strong { font-family: var(--serif); font-weight: 500; font-size: 170px; line-height: 1.1; margin: 0 100px 36px; text-wrap: balance; }
+.gross.ende em { display: block; }
+
+/* ---------- Anzeige im ganzen Fenster ---------- */
+#anzeige { position: fixed; inset: 0; }
+#anzeige .rahmen { width: 100%; height: 100%; }
+body.ruhig #anzeige { cursor: none; }
+#leiste { position: fixed; left: 50%; top: 22px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px;
+  background: #000c; color: #fff; padding: 8px 10px 8px 18px; border-radius: 30px; font-size: 14px; transition: opacity .6s; white-space: nowrap; }
+#leiste button { font: inherit; color: #fff; background: #ffffff26; border: 0; border-radius: 20px; padding: 7px 14px; cursor: pointer; }
+#leiste button:hover { background: #ffffff45; }
+body.ruhig #leiste { opacity: 0; pointer-events: none; }
+
+/* ---------- Teil 2: Bearbeiten ---------- */
+#werkstatt {
+  --w-grund: #f3f1ec; --w-flaeche: #fff; --w-rand: #d9d5cc; --w-text: #1e242c; --w-leise: #687280; --w-akzent: #1f5f8b; --w-rot: #b93a26;
+  position: fixed; inset: 0; display: grid; grid-template-rows: auto 1fr; background: var(--w-grund); color: var(--w-text); font-size: 15px; line-height: 1.4;
+}
+#werkstatt button, #werkstatt input, #werkstatt select, #werkstatt textarea { font: inherit; color: inherit; }
+#werkstatt header { display: flex; align-items: center; gap: 14px; padding: 12px 20px; background: var(--w-flaeche); border-bottom: 1px solid var(--w-rand); flex-wrap: wrap; }
+#werkstatt h1 { font-size: 19px; font-weight: 650; margin-right: 6px; }
+.reiter { display: flex; background: var(--w-grund); border-radius: 9px; padding: 3px; }
+.reiter button { border: 0; background: none; padding: 6px 16px; border-radius: 7px; color: var(--w-leise); cursor: pointer; }
+.reiter button.an { background: var(--w-flaeche); color: var(--w-text); box-shadow: 0 1px 3px #0002; font-weight: 600; }
+.stand { margin-left: auto; font-size: 13.5px; color: var(--w-leise); }
+.stand.offen { color: #9a5a00; font-weight: 600; }
+.knopf { border: 1px solid var(--w-rand); background: var(--w-flaeche); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
+.knopf:hover { border-color: #9aa3ad; }
+.knopf:disabled { opacity: .35; cursor: default; }
+.knopf.haupt { background: var(--w-akzent); border-color: var(--w-akzent); color: #fff !important; font-weight: 600; padding: 7px 22px; }
+.knopf.klein { padding: 3px 9px; font-size: 13.5px; }
+.knopf.rot { color: var(--w-rot) !important; }
+.spalten { display: grid; grid-template-columns: 300px minmax(380px, 1fr) minmax(360px, 44%); min-height: 0; }
+.spalten > * { overflow-y: auto; min-height: 0; }
+#liste { padding: 14px; border-right: 1px solid var(--w-rand); }
+.karte { display: grid; grid-template-columns: 96px 1fr auto; gap: 10px; align-items: center; padding: 8px; border-radius: 10px; cursor: pointer; border: 2px solid transparent; margin-bottom: 4px; }
+.karte:hover { background: #0000000a; }
+.karte.an { background: var(--w-flaeche); border-color: var(--w-akzent); }
+.karte .mini { width: 96px; height: 54px; border-radius: 5px; pointer-events: none; }
+.karte.blass .mini { opacity: .35; }
+.karte b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.karte .kt { min-width: 0; }
+.karte .kk { display: flex; flex-direction: column; gap: 3px; }
+.karte .kk .knopf { padding: 0 7px; font-size: 12px; line-height: 1.5; }
+.schild { display: inline-block; font-size: 11.5px; padding: 1px 7px; border-radius: 9px; background: #e4e1da; color: #4c5560; margin: 2px 4px 0 0; }
+.schild.rot { background: #f6d9d3; color: #8e2a1a; }
+.schild.gelb { background: #f8e7bd; color: #7a5200; }
+.neu { width: 100%; margin-top: 10px; padding: 10px; border-style: dashed; }
+#formular { padding: 20px 24px 60px; }
+.block { background: var(--w-flaeche); border: 1px solid var(--w-rand); border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; }
+.block h2 { font-size: 15px; font-weight: 650; margin-bottom: 12px; }
+.block h2 small { font-weight: 400; color: var(--w-leise); margin-left: 6px; }
+.feld { display: block; margin-bottom: 12px; }
+.feld:last-child { margin-bottom: 0; }
+.feld > span { display: block; font-size: 13px; color: var(--w-leise); margin-bottom: 4px; }
+#werkstatt input[type=text], #werkstatt input[type=number], #werkstatt input[type=date], #werkstatt input[type=time], #werkstatt select, #werkstatt textarea {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--w-rand); border-radius: 8px; background: #fff; }
+#werkstatt textarea { resize: vertical; min-height: 70px; }
+#werkstatt input:focus, #werkstatt select:focus, #werkstatt textarea:focus { outline: 2px solid var(--w-akzent); outline-offset: -1px; }
+.hilfe { font-size: 13px; color: var(--w-leise); margin-top: 5px; }
+.haken { display: flex; align-items: center; gap: 9px; cursor: pointer; margin-bottom: 8px; }
+.haken input { width: 18px; height: 18px; accent-color: var(--w-akzent); flex: none; }
+.zwei { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.zwei .feld { margin-bottom: 12px; }
+.termin { display: grid; grid-template-columns: 110px 1fr 1fr auto; gap: 6px; margin-bottom: 4px; align-items: center; }
+.termin .tk { display: flex; gap: 3px; }
+.termin-aus { display: flex; align-items: center; gap: 10px; margin: 0 0 12px 2px; font-size: 13.5px; }
+.termin-aus .haken { margin: 0; }
+.termin-aus input[type=text] { width: 200px !important; padding: 4px 8px !important; }
+.bilder { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.bildwahl { width: 92px; height: 70px; border: 2px solid var(--w-rand); border-radius: 8px; background: #f3f1ec center/contain no-repeat; cursor: pointer; font-size: 12.5px; color: var(--w-leise); }
+.bildwahl.an { border-color: var(--w-akzent); box-shadow: 0 0 0 2px #1f5f8b40; }
+.fallen { outline: 3px dashed var(--w-akzent); outline-offset: -6px; }
+#vorschau { padding: 20px; border-left: 1px solid var(--w-rand); background: #e9e6df; }
+#vorschau .rahmen { width: 100%; aspect-ratio: 16 / 9; border-radius: 8px; box-shadow: 0 6px 24px #0003; }
+.unter { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
+.unter .frei { flex: 1; }
+.info { margin-top: 14px; font-size: 13.5px; color: var(--w-leise); }
+.info b { color: var(--w-text); }
+#schleier { position: fixed; inset: 0; background: #0007; display: flex; align-items: center; justify-content: center; z-index: 10; padding: 20px; }
+#schleier .fenster { background: #fff; color: #1e242c; border-radius: 14px; padding: 24px 26px; max-width: 520px; font-size: 15.5px; line-height: 1.5; box-shadow: 0 20px 60px #0006; }
+#schleier h3 { font-size: 18px; margin-bottom: 10px; }
+#schleier p { margin-bottom: 10px; white-space: pre-line; }
+#schleier .unter { justify-content: flex-end; margin-top: 18px; }
+#schleier button { font: inherit; }
+@media (max-width: 1100px) { .spalten { grid-template-columns: 240px 1fr; } #vorschau { display: none; } }
+</style>
+</head>
+<body>
+<script id="daten" type="application/json">{"version":1,"einstellungen":{"gemeinde":"FEV Spaichingen","wochentag":0,"beginn":"10:00","frueherBeginn":"09:30","frueherAmSonntagNr":1,"frueherAnTerminen":[],"sekundenProFolie":12,"grosserCountdownAb":60,"schlussTitel":"Herzlich willkommen","schlussText":"Der Gottesdienst beginnt","countdownZeigen":true,"stimmung":"nacht"},"folien":[{"id":"f1","anzeigen":true,"rubrik":"Willkommen","titel":"Schön, dass du da bist","text":"Nimm dir einen Kaffee, such dir einen Platz – wir fangen gleich an."},{"id":"f2","anzeigen":true,"rubrik":"Test","bild":"b0vergle","bildArt":"voll"},{"id":"f3","anzeigen":true,"rubrik":"Montag","titel":"Ü60","wann":"Montag · 16:00 Uhr","bibelstelle":"Matthäus 1","text":"Der Treff für alle über 60."},{"id":"f4","anzeigen":false,"rubrik":"Dienstag","titel":"Kleingruppen & Bibelstunde","wann":"Dienstags · 19:00 Uhr · im wöchentlichen Wechsel","text":"Eine Woche treffen sich die Hauskreise, in der nächsten ist Bibelstunde.","ausfall":"Fällt diese Woche aus"},{"id":"f5","anzeigen":true,"rubrik":"Freitag","titel":"Freitags bei uns","termine":[{"zeit":"18:00 Uhr","name":"Gebet"},{"zeit":"18:00 Uhr","name":"Jungschar","notiz":"8 bis 11 Jahre"},{"zeit":"18:00 Uhr","name":"Teenkreis","notiz":"11 bis 15 Jahre","ausfall":"fällt aus"},{"zeit":"20:00 Uhr","name":"Jugend","notiz":"ab 15 Jahren"}]},{"id":"f6","anzeigen":true,"rubrik":"Besonderes","titel":"Titel der Veranstaltung","wann":"Samstag, 5. Dezember · 15:00 Uhr","text":"Ein kurzer Satz dazu.","bild":"b1beispi","bildArt":"seite"},{"id":"f7","anzeigen":true,"rubrik":"Hallo","titel":"title","wann":"14 uhr","bibelstelle":"7 math","termine":[{"zeit":"4","name":"name","notiz":"sdsf","ausfall":"fällt aus"}],"bild":"b1beispi","bildArt":"voll"},{"id":"f8","anzeigen":true,"rubrik":"Sonntag","titel":"Gebet & Gottesdienst","wann":"Sonntags · 9:30 Uhr Gebet · 10:00 Uhr Gottesdienst","text":"Am ersten Sonntag im Monat beginnt der Gottesdienst schon um 9:30 Uhr – ohne Gebet davor."}],"bilder":{"b0vergle":{"name":"vergleich-dlq.svg","url":"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI5MDAiIGhlaWdodD0iNDIwIiB2aWV3Qm94PSIwIDAgOTAwIDQyMCIgZm9udC1mYW1pbHk9IlNlZ29lIFVJLCBIZWx2ZXRpY2EsIEFyaWFsLCBzYW5zLXNlcmlmIj4KPHJlY3Qgd2lkdGg9IjkwMCIgaGVpZ2h0PSI0MjAiIGZpbGw9IiNmZmZmZmYiLz4KPHRleHQgeD0iNzAiIHk9IjI4IiBmb250LXNpemU9IjE2IiBmb250LXdlaWdodD0iNjAwIiBmaWxsPSIjMWYyMzI4Ij5OYWNocmljaHRlbiBkZXMgUnVucyBub2NoIGluIGRlciBETFE8L3RleHQ+CjxsaW5lIHgxPSI3MCIgeDI9Ijg4MCIgeTE9IjMzMCIgeTI9IjMzMCIgc3Ryb2tlPSIjZTZlOGViIi8+Cjx0ZXh0IHg9IjYyIiB5PSIzMzQiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJlbmQiIGZpbGw9IiM1NzYwNmEiPjA8L3RleHQ+CjxsaW5lIHgxPSI3MCIgeDI9IjcwIiB5MT0iNTAiIHkyPSIzMzAiIHN0cm9rZT0iI2YwZjFmMyIvPgo8dGV4dCB4PSI3MCIgeT0iMzQ4IiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjNTc2MDZhIj4wPC90ZXh0Pgo8bGluZSB4MT0iNzAiIHgyPSI4ODAiIHkxPSIyNzQiIHkyPSIyNzQiIHN0cm9rZT0iI2U2ZThlYiIvPgo8dGV4dCB4PSI2MiIgeT0iMjc4IiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0iZW5kIiBmaWxsPSIjNTc2MDZhIj4yMDwvdGV4dD4KPGxpbmUgeDE9IjIzMiIgeDI9IjIzMiIgeTE9IjUwIiB5Mj0iMzMwIiBzdHJva2U9IiNmMGYxZjMiLz4KPHRleHQgeD0iMjMyIiB5PSIzNDgiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiM1NzYwNmEiPjMwMDwvdGV4dD4KPGxpbmUgeDE9IjcwIiB4Mj0iODgwIiB5MT0iMjE4IiB5Mj0iMjE4IiBzdHJva2U9IiNlNmU4ZWIiLz4KPHRleHQgeD0iNjIiIHk9IjIyMiIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9ImVuZCIgZmlsbD0iIzU3NjA2YSI+NDA8L3RleHQ+CjxsaW5lIHgxPSIzOTQiIHgyPSIzOTQiIHkxPSI1MCIgeTI9IjMzMCIgc3Ryb2tlPSIjZjBmMWYzIi8+Cjx0ZXh0IHg9IjM5NCIgeT0iMzQ4IiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjNTc2MDZhIj42MDA8L3RleHQ+CjxsaW5lIHgxPSI3MCIgeDI9Ijg4MCIgeTE9IjE2MiIgeTI9IjE2MiIgc3Ryb2tlPSIjZTZlOGViIi8+Cjx0ZXh0IHg9IjYyIiB5PSIxNjYiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJlbmQiIGZpbGw9IiM1NzYwNmEiPjYwPC90ZXh0Pgo8bGluZSB4MT0iNTU2IiB4Mj0iNTU2IiB5MT0iNTAiIHkyPSIzMzAiIHN0cm9rZT0iI2YwZjFmMyIvPgo8dGV4dCB4PSI1NTYiIHk9IjM0OCIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzU3NjA2YSI+OTAwPC90ZXh0Pgo8bGluZSB4MT0iNzAiIHgyPSI4ODAiIHkxPSIxMDYiIHkyPSIxMDYiIHN0cm9rZT0iI2U2ZThlYiIvPgo8dGV4dCB4PSI2MiIgeT0iMTEwIiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0iZW5kIiBmaWxsPSIjNTc2MDZhIj44MDwvdGV4dD4KPGxpbmUgeDE9IjcxOCIgeDI9IjcxOCIgeTE9IjUwIiB5Mj0iMzMwIiBzdHJva2U9IiNmMGYxZjMiLz4KPHRleHQgeD0iNzE4IiB5PSIzNDgiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiM1NzYwNmEiPjEyMDA8L3RleHQ+CjxsaW5lIHgxPSI3MCIgeDI9Ijg4MCIgeTE9IjUwIiB5Mj0iNTAiIHN0cm9rZT0iI2U2ZThlYiIvPgo8dGV4dCB4PSI2MiIgeT0iNTQiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJlbmQiIGZpbGw9IiM1NzYwNmEiPjEwMDwvdGV4dD4KPGxpbmUgeDE9Ijg4MCIgeDI9Ijg4MCIgeTE9IjUwIiB5Mj0iMzMwIiBzdHJva2U9IiNmMGYxZjMiLz4KPHRleHQgeD0iODgwIiB5PSIzNDgiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiM1NzYwNmEiPjE1MDA8L3RleHQ+CjxsaW5lIHgxPSI3MCIgeDI9Ijg4MCIgeTE9IjMzMCIgeTI9IjMzMCIgc3Ryb2tlPSIjOGM5NTlmIi8+CjxsaW5lIHgxPSI3MCIgeDI9IjcwIiB5MT0iNTAiIHkyPSIzMzAiIHN0cm9rZT0iIzhjOTU5ZiIvPgo8dGV4dCB4PSI0NzUiIHk9IjM2OCIgZm9udC1zaXplPSIxMiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzFmMjMyOCI+U2VrdW5kZW4gc2VpdCBGcmVpZ2FiZSBkZXMgQXV0b1Jlc3VibWl0RmxvdyAoVDApPC90ZXh0Pgo8dGV4dCB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxOCAxOTApIHJvdGF0ZSgtOTApIiBmb250LXNpemU9IjEyIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjMWYyMzI4Ij5BbnRlaWwgZGVyIERMUS1OYWNocmljaHRlbiBiZWkgVDAgaW4gJTwvdGV4dD4KPHBhdGggZD0iTTg0LjQ4LDUwIEw5MS43OCw1MCBMOTMuMyw1MC45MSBMMTAyLjEyLDU0LjQxIEwxMDMuNjEsNTguMTYgTDExMi41Myw2MS40MSBMMTIwLjM0LDYxLjQxIEwxMjEuNzMsNjYuNjYgTDEzMC43Nyw2OC40MSBMMTMyLjA3LDc0LjE5IEwxMzQuNyw3NS45NCBMMTQzLjcxLDc4LjkxIEwxNTEuMjgsNzguOTEgTDE1Mi40OCw4Mi40MSBMMTU1LjE0LDgyLjQxIEwxNjQuMDgsODYuNjggTDE2NS4yNCw4OS40MSBMMTc0LjI3LDkyLjkxIEwxODEuOSw5Mi45MSBMMTgzLjExLDk2LjUyIEwxODUuNzksOTguNDQgTDE5NC44MSw5OS45MSBMMTk1Ljk5LDEwMC4yNiBMMjA0Ljk2LDEwMy40MSBMMjA2LjAxLDEwMy40MSBMMjE1LjA0LDEwNi45MSBMMjE2LjExLDEwNi45MSBMMjI1LjA0LDExMy4xMSBMMjI2LjEyLDExMy44MSBMMjM1LjA2LDEyMCBMMjM2LjI2LDEyMC4zNSBMMjQ1LjE2LDEyNy40MiBMMjQ2LjI2LDEyOC4yNiBMMjU1LjA4LDEzMC4yMiBMMjU2LjE5LDEzMC44NSBMMjU4Ljc4LDEzMS42NiBMMjY3LjYxLDEzNC4zNSBMMjY4LjY0LDEzNC4zNSBMMjcxLjM3LDEzNy42OCBMMjc0LjAxLDEzOS45OSBMMjgyLjkzLDE0MS4zNSBMMjgzLjg3LDE0MS45MSBMMjkzLjA4LDE0NC4xMiBMMjkzLjk4LDE0OS4xMiBMMjk2Ljc1LDE0OS44OSBMMzA1Ljc3LDE1My42NyBMMzA2LjcyLDE1NS45OCBMMzA5LjMzLDE1Ny4zMSBMMzEyLjA5LDE1OS40NSBMMzIwLjg4LDE2MC4yOSBMMzIyLjg5LDE2MC44NSBMMzI0LjQ5LDE2My4yNiBMMzI3LjE3LDE2NC44IEwzMjkuODEsMTY3LjE1IEwzMzIuNTYsMTY4LjMgTDMzNS4yOCwxNzAuMTIgTDMzOC4wMiwxNzEuMzUgTDM0MC42LDE3My40MSBMMzQzLjM3LDE3NC45MiBMMzQ2LjA1LDE3Ny4xNiBMMzQ4LjczLDE3OC43IEwzNTEuNDEsMTgwLjQ4IEwzNTQuMDgsMTgxLjg1IEwzNTYuODIsMTgzLjcgTDM1OS41MiwxODQuNzkgTDM2Mi4xOCwxODYuNjggTDM2NC44NCwxODguMjkgTDM2Ny40NCwxODkuODYgTDM3MC40NCwxOTEuNzkgTDM3Mi45MSwxOTMuNSBMMzc1LjY0LDE5NS42IEwzNzguMzIsMTk3LjcgTDM4MSwxOTkuMTQgTDM4My42NCwyMDEuMiBMMzg2LjQ3LDIwMy4xNiBMMzg5LjAyLDIwNS43OSBMMzkxLjc2LDIwNy42OCBMMzk0LjQ2LDIwOS4yOSBMMzk3LjE2LDIxMS42MyBMMzk5Ljg0LDIxMy4zMSBMNDAyLjQ5LDIxNS45IEw0MDUuMiwyMTcuNTUgTDQwNy45OSwyMTkuNzkgTDQxMC42OCwyMjIuNjkgTDQxMy4yMiwyMjQuMDIgTDQxNS45NCwyMjYuMjMgTDQxOC42NiwyMjguMjIgTDQyMS4zNywyMzAuMjkgTDQyNC4wMiwyMzEuNjUgTDQyNi43MSwyMzMuNjggTDQyOS41NCwyMzUuMDUgTDQzMi4yNywyMzcuMjkgTDQzNC44LDIzOC45IEw0MzcuNTEsMjQwLjY1IEw0NDAuMTgsMjQyLjkyIEw0NDIuODcsMjQ0LjYgTDQ0NS42LDI0Ni41MyBMNDQ4LjIzLDI0OC40OSBMNDUwLjk3LDI1MC4zMSBMNDUzLjY1LDI1Mi41MSBMNDU2LjMxLDI1NC4yNiBMNDU4Ljk0LDI1Ny4wMyBMNDYxLjY4LDI2MC41MyBMNDY0LjMzLDI2Mi4yMSBMNDY3LjA0LDI2NC4wMyBMNDY5LjczLDI2Ni44MyBMNDcyLjQzLDI2OS4xNyBMNDc1LjEyLDI3MS4wMyBMNDc3Ljc5LDI3My4yIEw0ODAuNDgsMjc0LjUzIEw0ODMuMTgsMjc3LjE1IEw0ODUuODcsMjc4LjEzIEw0ODguNTMsMjgwLjU4IEw0OTEuMjUsMjgyLjU4IEw0OTMuOTMsMjg1LjAzIEw0OTYuNjYsMjg3LjQxIEw0OTkuNDEsMjg5LjMzIEw1MDEuOTksMjkxLjQ3IEw1MDQuNywyOTMuNzQgTDUwNy4zOSwyOTQuOTcgTDUxMC4xLDI5Ny40OSBMNTEyLjc3LDI5OS41MiBMNTE1LjQ2LDMwMS43OSBMNTE4LjE2LDMwMy43NSBMNTIwLjg1LDMwNS44NSBMNTIzLjUyLDMwNy42IEw1MjYuMjIsMzEwLjIzIEw1MjguOTIsMzExLjYzIEw1MzEuNjIsMzEzLjg3IEw1MzQuMjgsMzE1LjQ0IEw1MzcuMTgsMzE3LjY4IEw1MzkuNjcsMzE5LjY0IEw1NDIuNDQsMzIxLjQzIEw1NDUuMjEsMzIyLjc2IEw1NDcuNzgsMzI0LjkzIEw1NTAuNDgsMzI2LjI5IEw1NTMuMTgsMzI4LjI1IEw1NTUuODgsMzI5LjIgTDU1OC42LDMzMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZDEyNDJmIiBzdHJva2Utd2lkdGg9IjIuMiIvPgo8cGF0aCBkPSJNODIuMiw1MCBMODQuNzMsNTAgTDk0LjczLDc4IEw5NS45NSwxNDggTDEwNC44NiwxOTUuMTUgTDExMi4wOSwyMDUuNjUgTDExMy4wNiwyMTQuNSBMMTE1LjU5LDIxNC40NyBMMTE4LjM0LDIxNC40NyBMMTIwLjkzLDIxNC40MyBMMTIzLjcxLDIxMy45OCBMMTMyLjQ1LDI1OC4yNSBMMTMyLjg5LDI2Mi45NCBMMTM1LjU4LDI2Mi45NCBMMTM4LjI4LDI2Mi45NCBMMTQxLjAxLDI2Mi45NCBMMTQzLjY5LDI2Mi45NCBMMTQ2LjQxLDI2Mi45NCBMMTQ5LjA1LDI2NS44OCBMMTUxLjcxLDI3NC4yOCBMMTU0LjQ4LDI3NC4xNCBMMTU3LjE0LDI3NC4xNCBMMTU5Ljg1LDI3NC4xNCBMMTYyLjUsMjc0LjE0IEwxNjUuMjUsMjc0LjE0IEwxNjcuODksMjczLjk3IEwxNzAuMzYsMzEwLjY1IEwxNzMuMDcsMzEwLjY1IEwxNzUuODEsMzEwLjY1IEwxNzguNDgsMzEwLjY1IEwxODEuMjUsMzEwLjY1IEwxODMuODksMzEwLjQgTDE4Ni42NCwzMDkuNTMgTDE4OS4yOCwzMDkuMjggTDE5MS45OCwzMDkuMTggTDE5NC43MSwzMDkuMTEgTDE5Ny4zOSwzMDguMjMgTDIwMC4xNCwzMDcuNSBMMjAyLjg5LDMwNi44NyBMMjA1LjY0LDMwNi4xMyBMMjA4LjI0LDMwNS4zMyBMMjEwLjgsMzI4LjA0IEwyMTMuNTEsMzI4LjA0IEwyMTYuMiwzMjguMDQgTDIxOC45LDMyNy45IEwyMjEuNjEsMzI3LjUyIEwyMjQuMywzMjcuMTMgTDIyNy4wMywzMjYuNTcgTDIyOS43MywzMjUuOTEgTDIzMi40MywzMjUuMSBMMjM1LjE1LDMyMy40MiBMMjM3Ljg3LDMyMC45NCBMMjQwLjUxLDMyOS42OSBMMjQzLjIxLDMyOC45OSBMMjQ1Ljk3LDMyOC42IEwyNDguNjEsMzI4LjQ2IEwyNTEuMzIsMzI4LjIyIEwyNTQuMDEsMzI4LjIyIEwyNTYuNzUsMzIyLjIzIEwyNTkuNDYsMzE5LjMzIEwyNjIuMTYsMzE5LjMzIEwyNjQuODgsMzE5LjIyIEwyNjcuNTksMzE0LjAxIEwyNzAuMzYsMzA5Ljc3IEwyNzIuOTIsMzMwIEwyNzUuNjQsMzI5LjY5IEwyNzguMzcsMzI5LjEzIEwyODEuMDUsMzI3LjEzIEwyODMuNzUsMzI2LjgyIEwyODYuNDUsMzI5LjY1IEwyODkuMTUsMzMwIEwyOTEuODUsMzMwIEwyOTQuNTUsMzMwIEwyOTcuMjUsMzMwIEwyOTkuOTYsMzMwIEwzMDIuNjUsMzMwIEwzMDUuMzUsMzI5Ljk3IEwzMDguMDYsMzMwIEwzMTAuNzYsMzI5Ljk3IEwzMTMuNDcsMzMwIEwzMTYuMTgsMzMwIEwzMTguODYsMzMwIEwzMjEuNTYsMzMwIEwzMjQuMjYsMzMwIEwzMjYuOTcsMzMwIEwzMjkuNjcsMzMwIEwzMzIuMzcsMzMwIEwzMzUuMDcsMzMwIEwzMzcuNzcsMzMwIEwzNDAuNSwzMzAgTDM0My4xOCwzMzAgTDM0NS44OCwzMzAgTDM0OC41OCwzMzAgTDM1MS4zLDMzMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMWE3ZjM3IiBzdHJva2Utd2lkdGg9IjIuMiIvPgo8cGF0aCBkPSJNODIuMjksNTAgTDg0Ljc2LDUwIEw5NC43MSw5Mi4yOSBMMTAyLjM3LDEwNi4zOCBMMTAzLjUyLDEzMS4wNSBMMTA2LjI1LDEzMS4wNSBMMTE1LjA1LDEzMC45MSBMMTE2LjIxLDEzMC45MSBMMTI1LjIsMTM3LjE0IEwxMjYuMzMsMTQwLjE0IEwxMzUuMzUsMTM4LjAyIEwxMzYuNSwxMzcuNiBMMTQ1LjU0LDEzNS44IEwxNDYuNzUsMTM1LjY2IEwxNTUuOCwxMzUuMDYgTDE1Ni45LDEzNC45NiBMMTY1LjgzLDEzNC45NiBMMTY3LjA0LDEzNC45NiBMMTc1LjkzLDE0NS41MyBMMTc2Ljc0LDE5MS4zNCBMMTc5LjQyLDE5MS4zNCBMMTgxLjg2LDI0My42NyBMMTkwLjgyLDI1MS4yNCBMMTkxLjEsMjg2Ljk3IEwxOTMuNzIsMjk2Ljc0IEwxOTYuMzUsMzMwIEwxOTkuMDgsMzMwIEwyMDEuNjksMzMwIEwyMDQuNCwzMzAgTDIwNy4xLDMzMCBMMjA5LjgsMzMwIEwyMTIuNSwzMzAgTDIxNS4yLDMzMCBMMjE3LjksMzMwIEwyMjAuNiwzMzAgTDIyMy4zMiwzMzAgTDIyNS45OSwzMzAgTDIyOC43LDMzMCBMMjMxLjM5LDMzMCBMMjM0LjEsMzMwIEwyMzYuOCwzMzAgTDIzOS41MSwzMzAgTDI0Mi4yMSwzMzAgTDI0NC45MiwzMzAgTDI0Ny42MSwzMzAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzA5NjlkYSIgc3Ryb2tlLXdpZHRoPSIyLjIiIHN0cm9rZS1kYXNoYXJyYXk9IjYgNCIvPgo8cGF0aCBkPSJNODYuMDksNTAgTDk0LjUzLDUwIEw5Ny43Niw1MCBMMTA2LjY1LDUwLjg5IEwxMDkuNDEsNTguNzYgTDExOC4xNiw2MS43MyBMMTIxLjA4LDY1LjEgTDEyMy44MSw2Ny4zOSBMMTMzLjM4LDY4LjY3IEwxMzcuMyw3Mi4yNSBMMTQ2LjQ2LDc3LjA0IEwxNDkuMzIsNzkuNDEgTDE1OC40Miw4MS45MSBMMTYxLjQsODIuMjMgTDE2NC4wOCw4Mi41MiBMMTY2LjksODIuNTUgTDE3Ni4wNiw4Mi41NSBMMTc5LjkyLDgyLjM0IEwxODIuNjQsODIuMyBMMTkxLjU1LDgyLjMgTDE5NC42Myw4Mi4zIEwyMDMuMzksODIuMjMgTDIwNS41Nyw4NS41NiBMMjE0LjcxLDg1LjU2IEwyMTcuMTYsODUuNTYgTDIyNi4yLDg1LjU2IEwyMjguNjMsODUuNTYgTDIzMS4xMiw4NS41NiBMMjQwLjI5LDg1LjUyIEwyNDIuNzksODQuNDkgTDI0NS44Myw4NC40NSBMMjU0LjQ2LDg0LjMxIEwyNTYuNzUsODMuODQgTDI2NS44Niw4My40MSBMMjY4LjIxLDg3LjQ1IEwyNzcuNDMsODkuNzQgTDI3OS43Myw5Ny40NCBMMjg4LjcyLDk5LjQgTDI5MC45LDEwMi45NCBMMjk5Ljk3LDEwNi40MSBMMzAyLjAxLDExNS42NCBMMzEwLjk3LDExOS4wOCBMMzEyLjk0LDEyMC41MSBMMzE1LjYxLDEyMC41MSBMMzE4LjU2LDEyMC41MSBMMzIxLjA5LDEyMC41MSBMMzIzLjgsMTIwLjUxIEwzMzIuODQsMTI0LjA5IEwzMzUuMTgsMTMwLjc0IEwzNDMuNzgsMTM0LjE4IEwzNDUuNTUsMTQxLjg3IEwzNTQuOSwxNDQuOTggTDM1Ni42OCwxNTIuNTMgTDM1OS4xNiwxNTUuODUgTDM2MS45LDE1OS4zMiBMMzcwLjg1LDE2Ni40NCBMMzcyLjY1LDE3MC45NSBMMzgxLjM4LDE3My43NCBMMzgyLjk5LDE4MS4yMiBMMzg1LjQyLDE4NC40NCBMMzg4LjcxLDE4Ni4wNSBMMzkxLjE2LDE4OC41OSBMMzkzLjc2LDE5MS41OSBMMzk2LjAzLDE5My4zOCBMMzk4LjkxLDE5NS42IEw0MDEuNzYsMTk4LjI1IEw0MDQuNTQsMjAxIEw0MDcuMDIsMjA0LjU4IEw0MDkuNzksMjA3LjAxIEw0MTIuMzUsMjA5LjQ0IEw0MTUuMTksMjExLjczIEw0MTcuNjksMjE0Ljk1IEw0MjAuMjksMjE3LjAzIEw0MjIuOSwyMTkuNzggTDQyNS42NSwyMjIuNDYgTDQyOC41OCwyMjUuOSBMNDMxLjY0LDIyOS4xNSBMNDMzLjc0LDIzMS41NSBMNDM2LjM5LDIzMy45MSBMNDM5LjA2LDIzNy4zOCBMNDQxLjcyLDI0MC4zNSBMNDQ0LjQ3LDI0Mi45MyBMNDQ3LjEsMjQ1LjIyIEw0NDkuOCwyNDcuNTEgTDQ1Mi41MSwyNTAuNDggTDQ1NS4wNSwyNTMuNDQgTDQ1Ny44OSwyNTYuNjMgTDQ2MC40MSwyNTkuNTMgTDQ2My4wNywyNjMuMjUgTDQ2NS44MywyNjUuNDMgTDQ2OC40MywyNjcuODYgTDQ3MS4xMiwyNzAuNjIgTDQ3My44OSwyNzMuOTEgTDQ3Ni40NiwyNzYuOTggTDQ3OC45NywyNzkuODUgTDQ4MS43OSwyODIuOTIgTDQ4NC4zNSwyODYuMTggTDQ4Ny4wMSwyODkuMTggTDQ4OS42OSwyOTIuNzYgTDQ5Mi40MSwyOTUuNjYgTDQ5Ny4yOCwyOTcuNjYgTDUwMi4yOSwyOTkuMjcgTDUyOS44NSwzMDMuNzQgTDUyOS45NiwzMjYuNTcgTDUzMi42NSwzMjkuMTggTDUzNS4zNSwzMzAgTDUzOC4wNSwzMzAgTDU0MC43NiwzMzAgTDU0My40NSwzMzAgTDU0Ni4xNywzMzAgTDU0OC44NSwzMzAgTDU1MS41NSwzMzAgTDU1NC4zLDMzMCBMNTU2Ljk2LDMzMCBMNTU5LjY1LDMzMCBMNTYyLjM1LDMzMCBMNTY1LjA4LDMzMCBMNTY3Ljc3LDMzMCBMNTcwLjQ1LDMzMCBMNTczLjE1LDMzMCBMNTc1Ljg1LDMzMCBMNTc4LjU1LDMzMCBMNTgxLjI1LDMzMCBMNTgzLjk4LDMzMCBMNTg2LjY1LDMzMCBMNTg5LjQxLDMzMCBMNTkyLjEsMzMwIEw1OTQuNzUsMzMwIEw1OTcuNDYsMzMwIEw2MDAuMTYsMzMwIEw2MDIuODgsMzMwIEw2MDUuNjcsMzMwIEw2MDguMjUsMzMwIEw2MTAuOTUsMzMwIEw2MTMuNjYsMzMwIEw2MTYuMzUsMzMwIEw2MTkuMDUsMzMwIEw2MjEuNzgsMzMwIEw2MjQuNDYsMzMwIEw2MjcuMTYsMzMwIEw2MjkuODYsMzMwIEw2MzIuNTYsMzMwIEw2MzUuMjYsMzMwIEw2MzcuOTYsMzMwIEw2NDAuNjgsMzMwIEw2NDMuMzYsMzMwIEw2NDYuMDYsMzMwIEw2NDguNzUsMzMwIEw2NTEuNDYsMzMwIEw2NTQuMTgsMzMwIEw2NTYuODYsMzMwIEw2NTkuNjcsMzMwIEw2NjIuMjYsMzMwIEw2NjQuOTYsMzMwIEw2NjcuNjYsMzMwIEw2NzAuMzYsMzMwIEw2NzMuMSwzMzAgTDY3Ny44NCwzMzAgTDY3OC41LDMzMCBMNjgxLjE4LDMzMCBMNjgzLjg3LDMzMCBMNjg2LjcsMzMwIEw2ODkuMzIsMzMwIEw2OTEuOTksMzMwIEw2OTQuNzMsMzMwIEw2OTcuMzksMzMwIEw3MDAuMDcsMzMwIEw3MDIuODYsMzMwIEw3MDUuNDgsMzMwIEw3MDguMTksMzMwIEw3MTAuODcsMzMwIEw3MTMuNjEsMzMwIEw3MTYuMjcsMzMwIEw3MTguOTksMzMwIEw3MjEuNjcsMzMwIEw3MjQuMzgsMzMwIEw3MjcuMDksMzMwIEw3MjkuNzcsMzMwIEw3MzIuNTIsMzMwIEw3MzUuMTksMzMwIEw3MzcuODksMzMwIEw3NDAuNTgsMzMwIEw3NDMuMjksMzMwIEw3NDUuOTgsMzMwIEw3NDguNjksMzMwIEw3NTEuNDYsMzMwIEw3NTQuMDksMzMwIEw3NTYuODIsMzMwIEw3NTkuNDgsMzMwIEw3NjIuMTksMzMwIEw3NjQuOSwzMzAgTDc2Ny41NywzMzAgTDc3MC4zMywzMzAgTDc3MywzMzAgTDc3NS42OSwzMzAgTDc3OC42MSwzMzAgTDc4MS4xMiwzMzAgTDc4My45LDMzMCBMNzg2LjUsMzMwIEw3ODkuMiwzMzAgTDc5MS45MSwzMzAgTDc5NC41OSwzMzAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzgyNTBkZiIgc3Ryb2tlLXdpZHRoPSIyLjIiIHN0cm9rZS1kYXNoYXJyYXk9IjYgNCIvPgo8cGF0aCBkPSJNODQuNDMsNTAgTDkzLjI3LDUwIEw5NS42NSw2MC42MyBMMTA0LjMzLDkyLjUxIEwxMDYuMzEsOTIuNTEgTDEwOS41Miw5Mi40NyBMMTE4LjI5LDkyLjIzIEwxMjAuMjksOTEuODcgTDEyOS42NCw5MS43NyBMMTMxLjY5LDkxLjYyIEwxMzQuMjgsOTEuNjIgTDE0My41Myw5MS4zNCBMMTQ1LjU0LDkwLjk1IEwxNTQuNTcsOTAuNzcgTDE1Ni42Myw5MC4zNSBMMTY1Ljc5LDkwLjI4IEwxNjguMjIsMTExLjA0IEwxNzYuNjEsMTI4Ljc1IEwxNzguNDQsMTI4Ljc1IEwxODEuMDcsMTI4Ljc1IEwxODQuNDIsMTI4Ljc1IEwxOTIuOTEsMTI4LjE1IEwxOTQuNjIsMTI3Ljk0IEwyMDMuNjksMTI3Ljc5IEwyMDUuMzcsMTI2LjcgTDIwOC4zMywxMjYuMzEgTDIxNy4wOSwxMjUuNDYgTDIxOC43OCwxMjUuMTcgTDIyNy41MiwxMjQuNjEgTDIyOS4zMSwxMjQgTDIzMS45MiwxMjMuNzIgTDI0MC44NCwxMjMuMTkgTDI0Mi41NCwxMjIuODcgTDI1MS4zNiwxMjYuMDYgTDI1Mi45NCwxNTAuMzYgTDI1NS40NiwxNjQuNDkgTDI1OC4xNywxNjQuNDYgTDI2MC45MiwxNjQuNDYgTDI2My41NSwxNjQuNDYgTDI2Ni4yOSwxNjQgTDI2OC45NiwxNjMuODkgTDI3MS43MywxNjMuNDMgTDI3NC4zOSwxNjMuMzYgTDI3Ny4xNywxNjMuMTUgTDI3OS43OSwxNjIuNzYgTDI4Mi40OCwxNjIuNzYgTDI4NS4xNywxNjIuNzYgTDI4Ny44NywxNjIuNzYgTDI5MC43LDE2Mi43NiBMMjkzLjI3LDE2Mi43NiBMMjk2LjEyLDE2Mi42NSBMMjk4LjY4LDE2Mi42NSBMMzAxLjM5LDE2MS42NiBMMzA0LjA4LDE2MS42NiBMMzEyLjgyLDE4My4zOCBMMzEzLjg3LDIwNy4zOSBMMzE2LjU3LDIwNi45MyBMMzE5LjI4LDIwNi44NiBMMzIyLjAxLDIwNi4zIEwzMjQuNjcsMjA1LjA2IEwzMjcuNDcsMjAzLjY0IEwzMzAuMSwyMDMuMjggTDMzMi43OSwyMDIuMjkgTDM0MS4zNCwyNTYuMjEgTDM0MS45NywyNTUuNzggTDM0NC42NywyNTUuNjggTDM0Ny4zOCwyNTUuMzIgTDM1MC4wNiwyNTguNjkgTDM1Mi40NSwyOTkuNjEgTDM1NS4xNCwyOTkuNSBMMzU3LjkzLDI5OS41IEwzNjAuMzksMzIwLjAxIEwzNjMuMDgsMzE5LjY2IEwzNjUuNzcsMzE5LjUxIEwzNjguNDksMzE5LjQ4IEwzNzEuMTUsMzI2LjE3IEwzNzMuODUsMzI2LjAzIEwzNzYuNTYsMzI1Ljg5IEwzNzkuMjUsMzI5Ljg2IEwzODEuOTUsMzI5LjQ3IEwzODQuNjYsMzI4LjggTDM4Ny4zNSwzMjguNTEgTDM5MC4wNiwzMjguMjMgTDM5Mi43NiwzMjcuNzcgTDM5NS40NiwzMjYuNzQgTDM5OC4xNSwzMjYuNzQgTDQwMC44NSwzMjYuNzQgTDQwMy41NiwzMjYuNzQgTDQwNi4yNSwzMjYuNzQgTDQwOC45NSwzMjkuOTMgTDQxMS42NSwzMzAgTDQxNC4zNSwzMjkuODIgTDQxNy4zOSwzMjkuODIgTDQxOS43NSwzMjkuODIgTDQyMi40NiwzMjkuNDMgTDQyNS4yLDMyNy40NSBMNDI3Ljg2LDMyNy4zMSBMNDMwLjU1LDMyNy4zMSBMNDMzLjI1LDMyNy4zMSBMNDM1Ljk1LDMyNy4yNyBMNDM4LjY2LDMyNy4yNyBMNDQxLjQxLDMyNy4yNyBMNDQ0LjA2LDMyNy4yNyBMNDQ2Ljc3LDMyNS43NSBMNDQ5LjUsMzI1Ljg2IEw0NTIuMTUsMzMwIEw0NTQuOSwzMzAgTDQ1Ny41NSwzMzAgTDQ2MC4yOCwzMjkuOTMgTDQ2Mi45NSwzMjkuOTMgTDQ2NS42NSwzMjkuOTMgTDQ2OC4zNiwzMjkuOTMgTDQ3MS4wNSwzMzAgTDQ3My43NiwzMzAgTDQ3Ni40NiwzMzAgTDQ3OS4xOSwzMzAgTDQ4MS44NiwzMzAgTDQ4NC41NiwzMjkuODYgTDQ4Ny4yNiwzMjkuODYgTDQ4OS45NiwzMjguMzQgTDQ5Mi42NiwzMjcuMDIgTDQ5NS4zNiwzMjYuODEgTDQ5OC4xLDMyNS45NiBMNTAwLjc3LDMyNS40NyBMNTAzLjQ4LDMyNC44NiBMNTA2LjE4LDMyNC4yMyBMNTA4Ljg3LDMyMi44MSBMNTExLjYyLDMyMi43NyBMNTE0LjI5LDMyMi43NyBMNTE3LDMyMi43NyBMNTE5LjY3LDMyOS43MiBMNTIyLjM2LDMyOS4zMyBMNTI1LjA2LDMyOS4zMyBMNTI3Ljc2LDMyOS4yOSBMNTMwLjQ3LDMyOS4yOSBMNTM0LjExLDMyOS4yOSBMNTM1Ljg3LDMzMCBMNTM4LjU3LDMzMCBMNTQxLjI3LDMzMCBMNTQzLjk4LDMzMCBMNTQ2LjY3LDMzMCBMNTQ5LjM3LDMzMCBMNTUyLjEzLDMzMCBMNTU0Ljc3LDMzMCBMNTU3LjQ3LDMzMCBMNTYwLjE3LDMzMCBMNTYyLjg3LDMzMCBMNTY1LjU4LDMzMCBMNTY4LjMyLDMzMCBMNTcxLjAzLDMzMCBMNTczLjY4LDMzMCBMNTc2LjM3LDMzMCBMNTc5LjA5LDMzMCBMNTgxLjc5LDMzMCBMNTg0LjQ4LDMzMCBMNTg3LjE3LDMzMCBMNTg5LjkzLDMzMCBMNTkyLjU3LDMzMCBMNTk1LjM3LDMzMCBMNTk3Ljk3LDMzMCBMNjAwLjY3LDMzMCBMNjAzLjQsMzMwIEw2MDYuMTEsMzMwIEw2MDguODMsMzMwIEw2MTEuNDcsMzMwIEw2MTQuMTcsMzMwIEw2MTYuODcsMzMwIEw2MTkuNTcsMzMwIEw2MjIuMjcsMzMwIEw2MjQuOTcsMzMwIEw2MjcuNzMsMzMwIEw2MzAuMzcsMzMwIEw2MzMuMDksMzMwIEw2MzUuOCwzMzAgTDYzOC40NywzMzAgTDY0MS4xOCwzMzAgTDY0My45LDMzMCBMNjQ2LjYzLDMzMCBMNjQ5LjI4LDMzMCBMNjUxLjk4LDMzMCBMNjU0LjY3LDMzMCBMNjU3LjM3LDMzMCBMNjYwLjA4LDMzMCBMNjYyLjc4LDMzMCBMNjY1LjUzLDMzMCBMNjY4LjE4LDMzMCBMNjcwLjg4LDMzMCBMNjczLjU3LDMzMCBMNjc2LjI4LDMzMCBMNjc4Ljk5LDMzMCBMNjgxLjY4LDMzMCBMNjg0LjQ0LDMzMCBMNjg3LjA4LDMzMCBMNjg5Ljc4LDMzMCBMNjkyLjQ4LDMzMCBMNjk1LjIsMzMwIEw2OTcuODgsMzMwIEw3MDAuNTgsMzMwIEw3MDMuMzQsMzMwIEw3MDUuOTksMzMwIEw3MDguNjksMzMwIEw3MTEuMzksMzMwIEw3MTQuMDksMzMwIEw3MTYuNzksMzMwIEw3MTkuNDksMzMwIEw3MjIuMjQsMzMwIEw3MjQuODksMzMwIEw3MjcuNTksMzMwIEw3MzAuMzEsMzMwIEw3MzMsMzMwIEw3MzUuNjksMzMwIEw3MzguNCwzMzAgTDc0MS4xNiwzMzAgTDc0My44LDMzMCBMNzQ2LjUsMzMwIEw3NDkuMiwzMzAgTDc1MS45MSwzMzAgTDc1NC42MSwzMzAgTDc1Ny4zMSwzMzAgTDc2MC4wNiwzMzAgTDc2Mi43MSwzMzAgTDc2NS41MSwzMzAgTDc2OC4xMSwzMzAgTDc3MC44LDMzMCBMNzczLjUxLDMzMCBMNzc2LjIxLDMzMCBMNzc4Ljk2LDMzMCBMNzgxLjYyLDMzMCBMNzg0LjMxLDMzMCBMNzg3LjAxLDMzMCBMNzg5LjcyLDMzMCBMNzkyLjQxLDMzMCBMNzk1LjEyLDMzMCBMNzk3Ljg3LDMzMCBMODAwLjUyLDMzMCBMODAzLjIyLDMzMCBMODA1LjkyLDMzMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZDEyNDJmIiBzdHJva2Utd2lkdGg9IjIuMiIgc3Ryb2tlLWRhc2hhcnJheT0iNiA0Ii8+CjxwYXRoIGQ9Ik04Ni4wMiw1MCBMOTQuOTEsNTAgTDEwNC4wMSw2OC4yOCBMMTA2LjMyLDk5LjkgTDEwOC45NSw5OS45IEwxMTEuNTMsOTkuOSBMMTE0LjQsOTkuOSBMMTE2Ljc4LDk5LjkgTDEyNi4xNSw5OS44IEwxMjguMTYsOTkuNTggTDEzNy42Niw5OS41OCBMMTM5LjkyLDk5LjI2IEwxNDkuMTMsOTkuMTYgTDE1MS4yOSw5OC43MyBMMTYwLjQyLDk4LjM3IEwxNjIuNzksOTYuNDkgTDE3MS45MSw5Ni40MiBMMTczLjY5LDEzNS4wNSBMMTc3LjEzLDEzNS4wNSBMMTc5LjIxLDEzNS4wNSBMMTgxLjk0LDEzNS4wNSBMMTg0Ljc1LDEzNS4wNSBMMTg3LjU0LDEzNS4wNSBMMTkwLjA2LDEzNS4wNSBMMTkyLjgsMTM1LjA1IEwxOTUuNDMsMTM0Ljk3IEwxOTgsMTM0LjU1IEwyMDcuMDUsMTM0LjEyIEwyMDkuMiwxMzIuNDEgTDIxOC4wNSwxMzIuMDYgTDIyMC4wMSwxMzAuNzggTDIyOS4yMSwxMzAuNiBMMjMxLjExLDEzMC4xIEwyNDAuMzcsMTI5Ljg1IEwyNDIuMzUsMTI4LjkzIEwyNDQuOTQsMTI4LjA0IEwyNDcuOTMsMTI3LjE1IEwyNTYuODksMTI0LjU1IEwyNTguOTIsMTE5LjgyIEwyNjguMjQsMTE1LjAyIEwyNzAuNSwxMTIuODUgTDI3OS4zNCwxMTEuODUgTDI4MS43NSwxMDguNDggTDI5MC40MiwxMDcuNzYgTDI5Mi41MSwxMDcuNDQgTDMwMS43NiwxMDcuNDQgTDMwMy43NywxMjAuODIgTDMxMi43OCwxMjEuMjEgTDMxNC44MiwxMjkuMDMgTDMyNC4wNSwxMjQuMDUgTDMyNS42NiwxNzQuMDcgTDMzNC41MSwxNzMuMDcgTDMzNiwxNzIuOTMgTDM0NC41LDIyOC42NiBMMzQ1LjUxLDIyOC42NiBMMzQ4LjMxLDIyOC42NiBMMzUwLjQyLDI3OC4xIEwzNTkuMjQsMjk4LjM4IEwzNTkuNDgsMzA0Ljc4IEwzNjIuMTQsMzExLjMzIEwzNjQuNzUsMzI1Ljg0IEwzNjcuNDYsMzI5Ljk2IEwzNzAuMTUsMzI5LjY4IEwzNzIuODUsMzI5Ljc1IEwzNzUuNTUsMzI5LjI1IEwzNzguMjUsMzI5LjY0IEwzODAuOTUsMzI5LjA4IEwzODMuNjUsMzI3LjEyIEwzODYuMzUsMzI4LjY4IEwzODkuMDYsMzI2LjY2IEwzOTEuODEsMzI1LjYzIEwzOTQuNDUsMzI5Ljk2IEwzOTcuMTYsMzI3LjQ3IEwzOTkuODgsMzIzLjYzIEw0MDIuNTYsMzIxLjQ2IEw0MDUuMywzMTcuMTIgTDQwNy45NiwzMzAgTDQxMC43MSwzMjkuNjEgTDQxMy4zNywzMjkuNjEgTDQxNi4wNiwzMjkuNDcgTDQxOC43NywzMjkuNDcgTDQyMS40NywzMjkuNDcgTDQyNC4xNywzMjkuOTYgTDQyNi44NywzMjkuMTggTDQyOS42OCwzMjkuNjQgTDQzMi4yNywzMjguODYgTDQzNC45NywzMjkuODYgTDQzNy44LDMyOC45MyBMNDQwLjQ0LDMyOC40MyBMNDQzLjA3LDMyOS44MiBMNDQ1Ljc4LDMzMCBMNDQ4LjYsMzI4LjkgTDQ1MS4xOCwzMjkuODIgTDQ1My44OSwzMjkuODIgTDQ1Ni41OCwzMjkuODYgTDQ1OS4yOCwzMjkuMjIgTDQ2MS45OCwzMjkuMTggTDQ2NC43LDMyOSBMNDY3LjU1LDMyOS43MiBMNDcwLjEsMzMwIEw0NzIuNzksMzI5LjkzIEw0NzUuNSwzMjkuNzIgTDQ3OC4xOSwzMjkuOTYgTDQ4MC45LDMyOS44MiBMNDgzLjYsMzI5LjcyIEw0ODYuNDgsMzI4LjkgTDQ4OS4wMSwzMjkuMTggTDQ5MS42OSwzMjkuOTYgTDQ5NC40LDMyOS4yNSBMNDk3LjEsMzI5Ljg5IEw0OTkuNzksMzI5LjI5IEw1MDIuNSwzMjkuNSBMNTA1LjUsMzI4Ljg2IEw1MDcuOTEsMzI3LjkgTDUxMC42LDMyOS43NSBMNTEzLjMxLDMzMCBMNTE2LDMyOS44MiBMNTE4LjcxLDMyOS41IEw1MjEuNCwzMzAgTDUyNC42MSwzMjkuNCBMNTI2LjgxLDMyOC4yOSBMNTI5LjUxLDMyOS43MiBMNTMyLjIxLDMyOS4xNSBMNTM0LjkxLDMzMCBMNTM3LjYyLDMyOS42MSBMNTQwLjMxLDMyOS40IEw1NDMuNjUsMzI5Ljk2IEw1NDUuNzEsMzI5Ljc5IEw1NDguNDEsMzI5LjcyIEw1NTEuMTIsMzMwIEw1NTMuODMsMzI5LjgyIEw1NTYuNTIsMzI5LjcyIEw1NTkuMjIsMzI5LjI1IEw1NjIuNTcsMzI5LjI1IEw1NjQuNjIsMzI5LjI1IEw1NjcuMzIsMzMwIEw1NzAuMDIsMzI5LjkzIEw1NzIuNzIsMzI5Ljc1IEw1NzUuNDMsMzI5LjA4IEw1NzguMTMsMzI5Ljc5IEw1ODEuNzgsMzI5LjU3IEw1ODMuNTQsMzI5Ljc5IEw1ODYuMjMsMzMwIEw1ODguOTMsMzMwIEw1OTEuNjMsMzMwIEw1OTQuMzMsMzMwIiBmaWxsPSJub25lIiBzdHJva2U9IiMxYTdmMzciIHN0cm9rZS13aWR0aD0iMi4yIiBzdHJva2UtZGFzaGFycmF5PSI2IDQiLz4KPGxpbmUgeDE9IjcwIiB4Mj0iOTQiIHkxPSIzOTgiIHkyPSIzOTgiIHN0cm9rZT0iI2QxMjQyZiIgc3Ryb2tlLXdpZHRoPSIyLjUiLz4KPHRleHQgeD0iMTAwIiB5PSI0MDIiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiMxZjIzMjgiPkE6IGFsdDwvdGV4dD4KPGxpbmUgeDE9IjE0OS42IiB4Mj0iMTczLjYiIHkxPSIzOTgiIHkyPSIzOTgiIHN0cm9rZT0iIzFhN2YzNyIgc3Ryb2tlLXdpZHRoPSIyLjUiLz4KPHRleHQgeD0iMTc5LjYiIHk9IjQwMiIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzFmMjMyOCI+QjogbmV1PC90ZXh0Pgo8bGluZSB4MT0iMjI5LjIiIHgyPSIyNTMuMiIgeTE9IjM5OCIgeTI9IjM5OCIgc3Ryb2tlPSIjMDk2OWRhIiBzdHJva2Utd2lkdGg9IjIuNSIgc3Ryb2tlLWRhc2hhcnJheT0iNiA0Ii8+Cjx0ZXh0IHg9IjI1OS4yIiB5PSI0MDIiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiMxZjIzMjgiPkM6IG5ldSAoV2RoLik8L3RleHQ+CjxsaW5lIHgxPSIzNTUiIHgyPSIzNzkiIHkxPSIzOTgiIHkyPSIzOTgiIHN0cm9rZT0iIzgyNTBkZiIgc3Ryb2tlLXdpZHRoPSIyLjUiIHN0cm9rZS1kYXNoYXJyYXk9IjYgNCIvPgo8dGV4dCB4PSIzODUiIHk9IjQwMiIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzFmMjMyOCI+RDogYWx0ICsgU2Vzc2lvbi1TZXR0aW5nczwvdGV4dD4KPGxpbmUgeDE9IjU2MCIgeDI9IjU4NCIgeTE9IjM5OCIgeTI9IjM5OCIgc3Ryb2tlPSIjZDEyNDJmIiBzdHJva2Utd2lkdGg9IjIuNSIgc3Ryb2tlLWRhc2hhcnJheT0iNiA0Ii8+Cjx0ZXh0IHg9IjU5MCIgeT0iNDAyIiBmb250LXNpemU9IjEyIiBmaWxsPSIjMWYyMzI4Ij5FOiBuZXUgKyBTZXNzaW9uLVNldHRpbmdzPC90ZXh0Pgo8bGluZSB4MT0iNzY1IiB4Mj0iNzg5IiB5MT0iMzk4IiB5Mj0iMzk4IiBzdHJva2U9IiMxYTdmMzciIHN0cm9rZS13aWR0aD0iMi41IiBzdHJva2UtZGFzaGFycmF5PSI2IDQiLz4KPHRleHQgeD0iNzk1IiB5PSI0MDIiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiMxZjIzMjgiPkY6IG5ldSArIFNlc3Npb24tU2V0dGluZ3MgKFdkaC4pPC90ZXh0Pgo8L3N2Zz4K"},"b1beispi":{"name":"beispiel-flyer.svg","url":"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAwIDE0MTQiIHdpZHRoPSIxMDAwIiBoZWlnaHQ9IjE0MTQiPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzJiNGE2MyIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM2YjRhMmEiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSIxMDAwIiBoZWlnaHQ9IjE0MTQiIGZpbGw9InVybCgjZykiLz4KICA8cmVjdCB4PSI1MCIgeT0iNTAiIHdpZHRoPSI5MDAiIGhlaWdodD0iMTMxNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZTliZDcyIiBzdHJva2Utd2lkdGg9IjQiLz4KICA8dGV4dCB4PSI1MDAiIHk9IjU2MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9Ikdlb3JnaWEsIHNlcmlmIiBmb250LXNpemU9IjEyMCIgZmlsbD0iI2YzZWZlNiI+QmVpc3BpZWwtPC90ZXh0PgogIDx0ZXh0IHg9IjUwMCIgeT0iNzAwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0iR2VvcmdpYSwgc2VyaWYiIGZvbnQtc2l6ZT0iMTIwIiBmaWxsPSIjZjNlZmU2Ij5GbHllcjwvdGV4dD4KICA8dGV4dCB4PSI1MDAiIHk9Ijg0MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkhlbHZldGljYSwgQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iNDQiIGZpbGw9IiNlOWJkNzIiIGxldHRlci1zcGFjaW5nPSI2Ij5ISUVSIFNURUhUIEVVRVIgQklMRDwvdGV4dD4KPC9zdmc+Cg=="}}}</script>
+<script id="programm">
+"use strict";
+/* ===================================================================
+   Aufbau dieses Programms
+   1. Hilfen           – kleine Werkzeuge
+   2. Daten            – Inhalte lesen, Bilder, Termine, nächster Beginn
+   3. Bühne            – zeichnet Folien, Countdown, Schlussbild
+   4. Anzeige          – die Bühne im ganzen Fenster (Sonntag)
+   5. Bearbeiten       – Folienliste, Formular, Vorschau
+   6. Speichern        – die Datei schreibt sich selbst neu
+   =================================================================== */
+
+/* ---------- 1. Hilfen ---------- */
+function h(tag, eig, ...kinder) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(eig || {})) {
+    if (v == null || v === false) continue;
+    if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (k === "class") el.className = v;
+    else if (k === "value" || k === "checked" || k === "disabled") el[k] = v;
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  el.append(...kinder.flat(Infinity).filter(k => k != null && k !== false));
+  return el;
+}
+const zz = n => String(n).padStart(2, "0");
+const tagText = d => `${d.getFullYear()}-${zz(d.getMonth() + 1)}-${zz(d.getDate())}`;
+const kurzDatum = t => { const [j, m, d] = t.split("-"); return `${d}.${m}.`; };
+const neueId = p => p + Math.random().toString(36).slice(2, 9);
+const WOCHENTAGE = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
+
+/* ---------- 2. Daten ---------- */
+const STANDARD = {
+  gemeinde: "Unsere Gemeinde", wochentag: 0, beginn: "10:00", frueherBeginn: "09:30", frueherAmSonntagNr: 0,
+  frueherAnTerminen: [], sekundenProFolie: 12, grosserCountdownAb: 60, countdownZeigen: true,
+  schlussTitel: "Herzlich willkommen", schlussText: "Der Gottesdienst beginnt", stimmung: "nacht",
+};
+let D = JSON.parse(document.getElementById("daten").textContent || "{}");
+D.einstellungen = Object.assign({}, STANDARD, D.einstellungen);
+D.folien = D.folien || [];
+D.bilder = D.bilder || {};
+const kern = () => JSON.stringify({ einstellungen: D.einstellungen, folien: D.folien });
+let gespeicherterKern = kern();           // Stand, wie er in der Datei steht
+
+/* Bilder stecken als Text in der Datei. Für die Anzeige wird jedes einmal in ein schnelles Speicher-Bild umgewandelt. */
+const bildSpeicher = new Map();
+function bildUrl(id) {
+  const b = D.bilder[id];
+  if (!b) return null;
+  if (!bildSpeicher.has(id)) {
+    try {
+      const [kopf, rest] = b.url.split(",");
+      const typ = kopf.slice(5).split(";")[0];
+      let bytes;
+      if (kopf.includes(";base64")) {
+        const roh = atob(rest);
+        bytes = new Uint8Array(roh.length);
+        for (let i = 0; i < roh.length; i++) bytes[i] = roh.charCodeAt(i);
+      } else bytes = new TextEncoder().encode(decodeURIComponent(rest));
+      bildSpeicher.set(id, URL.createObjectURL(new Blob([bytes], { type: typ })));
+    } catch { bildSpeicher.set(id, b.url); }
+  }
+  return bildSpeicher.get(id);
+}
+
+/* Wird eine Folie heute gezeigt? */
+function folienStand(f, heute = tagText(new Date())) {
+  if (f.anzeigen === false) return "ausgeblendet";
+  if (f.bis && heute > f.bis) return "abgelaufen";
+  if (f.von && heute < f.von) return "spaeter";
+  return "sichtbar";
+}
+const sichtbareFolien = () => D.folien.filter(f => folienStand(f) === "sichtbar");
+
+/* Beginn des nächsten Gottesdienstes (normal oder früher) */
+function beginnAm(tag, E) {
+  const frueh = (E.frueherAnTerminen || []).includes(tagText(tag)) ||
+                (E.frueherAmSonntagNr > 0 && Math.ceil(tag.getDate() / 7) === Number(E.frueherAmSonntagNr));
+  const [std, min] = String((frueh ? E.frueherBeginn : E.beginn) || "10:00").split(":").map(Number);
+  const z = new Date(tag);
+  z.setHours(std || 0, min || 0, 0, 0);
+  return z;
+}
+const NACHLAUF = 3 * 3600 * 1000;          // so lange bleibt das Schlussbild stehen
+function naechsterBeginn(E, jetzt = new Date()) {
+  const tag = new Date(jetzt);
+  tag.setDate(tag.getDate() + ((Number(E.wochentag) - tag.getDay() + 7) % 7));
+  let z = beginnAm(tag, E);
+  if (jetzt - z > NACHLAUF) { tag.setDate(tag.getDate() + 7); z = beginnAm(tag, E); }
+  return z;
+}
+
+/* ---------- 3. Bühne ---------- */
+function baueFolie(f) {
+  const url = f.bild ? bildUrl(f.bild) : null;
+  const art = url ? ({ voll: "voll", hinter: "hinter" }[f.bildArt] || "seite") : "text";
+  const hatTermine = (f.termine || []).length > 0;
+  const s = h("section", { class: `folie art-${art}${f.ausfall ? " abgesagt" : ""}${hatTermine ? " kompakt" : ""}` });
+  if (url) s.append(h("div", { class: "bildflaeche" },
+    art === "voll" && h("img", { class: "weich", src: url, alt: "" }),
+    h("img", { class: "bild", src: url, alt: "" })));
+  if (art === "voll") return s;
+  const satz = h("div", { class: "satz", style: "display:flex;flex-direction:column;align-items:flex-start" },
+    f.rubrik && h("div", { class: "rubrik" }, f.rubrik),
+    f.titel && h("div", { class: "titel" }, f.titel),
+    f.ausfall && h("div", { class: "marke" }, f.ausfall),
+    f.wann && h("div", { class: "wann" }, f.wann),
+    f.bibelstelle && h("div", { class: "stelle" }, f.bibelstelle),
+    f.text && h("div", { class: "text" }, f.text),
+    hatTermine && h("div", { class: "termine" }, f.termine.map(t => [
+      h("span", { class: "zeit" + (t.ausfall ? " aus" : "") }, t.zeit || ""),
+      h("span", { class: "name" + (t.ausfall ? " aus" : "") }, t.name || ""),
+      t.ausfall ? h("span", { class: "notiz" }, h("b", { class: "marke" }, t.ausfall))
+                : h("span", { class: "notiz" }, t.notiz || ""),
+    ])));
+  s.append(h("div", { class: "inhalt" }, satz));
+  return s;
+}
+/* Passt der Text nicht auf die Folie, wird er schrittweise kleiner. */
+function einpassen(folie) {
+  const inhalt = folie.querySelector(".inhalt");
+  if (!inhalt) return;
+  const satz = inhalt.firstChild;
+  let f = 1;
+  inhalt.style.setProperty("--f", f);
+  while (f > 0.4 && (satz.offsetHeight > inhalt.clientHeight || satz.scrollWidth > inhalt.clientWidth + 2)) {
+    f -= 0.05;
+    inhalt.style.setProperty("--f", f.toFixed(2));
+  }
+}
+
+/* still = steht (Vorschau, Miniatur); sonst läuft sie von selbst weiter */
+function Buehne(rahmen, { still = false, miniatur = false } = {}) {
+  const RING = 2 * Math.PI * 430;
+  const folienBox = h("div"), punkte = h("div", { class: "punkte" }), gemeinde = h("div", { class: "gemeinde" });
+  const uhrZahl = h("strong", {}, "–:––"), uhr = h("div", { class: "uhr" }, h("span", {}, "Beginn in"), uhrZahl);
+  const fortschritt = h("b"), pause = h("div", { class: "pause", hidden: true }, "❚❚ Pause");
+  const ring = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  ring.setAttribute("viewBox", "0 0 900 900");
+  ring.innerHTML = `<circle class="spur" cx="450" cy="450" r="430"/><circle class="ring" cx="450" cy="450" r="430" stroke-dasharray="${RING}"/>`;
+  const grossZahl = h("strong"), grossText = h("em");
+  const gross = h("div", { class: "gross" }, h("div", { class: "licht a" }), h("div", { class: "licht b" }), ring, h("span", {}, "Gleich geht’s los"), grossZahl, grossText);
+  const b = h("div", { class: "buehne" }, h("div", { class: "licht a" }), h("div", { class: "licht b" }), folienBox,
+    h("div", { class: "fuss" }, gemeinde, punkte, uhr), h("div", { class: "balken" }, fortschritt), pause, gross);
+  rahmen.classList.add("rahmen");
+  rahmen.append(b);
+  const skalieren = () => { b.style.transform = `translate(-50%, -50%) scale(${Math.min(rahmen.clientWidth / 1920, rahmen.clientHeight / 1080)})`; };
+  new ResizeObserver(skalieren).observe(rahmen);
+  skalieren();
+
+  let folien = [], elemente = [], nr = 0, takt = null, haelt = false, festesZiel = null, uhrTakt = null;
+  const E = () => D.einstellungen;
+
+  function rahmenwerk() {
+    b.className = "buehne " + (E().stimmung === "morgen" ? "morgen" : "nacht") + (still ? " still" : "");
+    gemeinde.textContent = E().gemeinde || "";
+    grossText.textContent = E().schlussText || "";
+    uhr.style.visibility = E().countdownZeigen === false ? "hidden" : "";
+  }
+  function aufbauen(liste, aktiv, punktZahl = liste.length, punktAn = aktiv) {
+    rahmenwerk();
+    folien = liste;
+    elemente = liste.map(baueFolie);
+    folienBox.replaceChildren(...elemente);
+    elemente.forEach(einpassen);
+    punkte.replaceChildren(...Array.from({ length: punktZahl }, (_, i) => h("i", { class: i === punktAn ? "an" : "" })));
+    nr = aktiv;
+    elemente.forEach((el, i) => el.classList.toggle("aktiv", i === nr));
+  }
+  function zeige(i) {
+    clearTimeout(takt);
+    if (!elemente.length) return;
+    if (i >= elemente.length) {               // Runde zu Ende: sind inzwischen andere Folien dran (Datum)?
+      const neu = sichtbareFolien();
+      if (neu.length !== folien.length || neu.some((f, k) => f !== folien[k])) return start();
+    }
+    nr = (i + elemente.length) % elemente.length;
+    elemente.forEach((el, k) => el.classList.toggle("aktiv", k === nr));
+    [...punkte.children].forEach((p, k) => p.classList.toggle("an", k === nr));
+    const sek = Number(folien[nr].sekunden) || Number(E().sekundenProFolie) || 12;
+    fortschritt.classList.remove("laeuft", "halt");
+    void fortschritt.offsetWidth;             // Balken neu starten
+    fortschritt.style.animationDuration = sek + "s";
+    fortschritt.classList.add("laeuft");
+    if (haelt) fortschritt.classList.add("halt");
+    else takt = setTimeout(() => zeige(nr + 1), sek * 1000);
+  }
+  function start() {
+    let liste = sichtbareFolien();
+    if (!liste.length) liste = [{ titel: E().gemeinde }];
+    aufbauen(liste, 0);
+    zeige(0);
+    if (!uhrTakt) uhrTakt = setInterval(tick, 250);
+    tick();
+  }
+  function einzeln(folie) {                     // Vorschau: genau diese Folie, stehend
+    const sichtbar = sichtbareFolien();
+    aufbauen([folie], 0, sichtbar.length, sichtbar.indexOf(folie));
+    if (!miniatur && !uhrTakt) uhrTakt = setInterval(tick, 500);
+    tick();
+  }
+  function tick() {
+    const ziel = festesZiel || naechsterBeginn(E()).getTime();
+    const rest = Math.ceil((ziel - Date.now()) / 1000);
+    if (rest <= 0) {
+      uhrZahl.textContent = "0:00";
+      if (still) return;
+      gross.className = "gross an ende";
+      grossZahl.textContent = E().schlussTitel || "";
+      return;
+    }
+    const std = Math.floor(rest / 3600), min = Math.floor(rest % 3600 / 60), sek = rest % 60;
+    uhrZahl.textContent = std >= 24 ? `${Math.floor(std / 24)} T ${std % 24} h` : std ? `${std}:${zz(min)}:${zz(sek)}` : `${min}:${zz(sek)}`;
+    const ab = Number(E().grosserCountdownAb) || 0;
+    const letzte = !still && rest <= ab;
+    gross.className = "gross" + (letzte ? " an" : "");
+    if (letzte) {
+      grossZahl.textContent = rest;
+      ring.lastChild.style.strokeDashoffset = RING * (1 - rest / ab);
+    }
+  }
+  return {
+    start, einzeln, tick,
+    weiter: () => zeige(nr + 1), zurueck: () => zeige(nr - 1),
+    pause() { haelt = !haelt; pause.hidden = !haelt; zeige(nr); },
+    probe(sekunden) { festesZiel = sekunden ? Date.now() + sekunden * 1000 : null; gross.className = "gross"; },
+    stopp() { clearTimeout(takt); clearInterval(uhrTakt); uhrTakt = null; },
+  };
+}
+
+/* ---------- 4. Anzeige ---------- */
+const anzeigeEl = h("div", { id: "anzeige" }, h("div", {}));
+const leiste = h("div", { id: "leiste" },
+  h("span", {}, "← → blättern · Leertaste Pause"),
+  h("button", { onclick: vollbild }, "Vollbild (F)"),
+  h("button", { onclick: () => modus("bearbeiten") }, "Bearbeiten (E)"));
+anzeigeEl.append(leiste);
+const werkstatt = h("div", { id: "werkstatt", hidden: true });
+document.body.append(anzeigeEl, werkstatt);
+const live = Buehne(anzeigeEl.firstChild);
+let aktuellerModus = null, wachSperre = null;
+
+function vollbild() {
+  const d = document, el = d.documentElement;
+  if (d.fullscreenElement || d.webkitFullscreenElement) (d.exitFullscreen || d.webkitExitFullscreen).call(d);
+  else (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+}
+let ruheTakt;
+function wach() {
+  document.body.classList.remove("ruhig");
+  clearTimeout(ruheTakt);
+  ruheTakt = setTimeout(() => document.body.classList.add("ruhig"), 3000);
+}
+addEventListener("mousemove", wach);
+anzeigeEl.addEventListener("dblclick", vollbild);
+addEventListener("keydown", e => {
+  if (aktuellerModus !== "anzeige" || document.getElementById("schleier")) {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") { e.preventDefault(); if (aktuellerModus === "bearbeiten") speichern(); }
+    return;
+  }
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === "f") vollbild();
+  else if (k === "e") modus("bearbeiten");
+  else if (k === "arrowright" || k === "pagedown") live.weiter();
+  else if (k === "arrowleft" || k === "pageup") live.zurueck();
+  else if (k === " ") { e.preventDefault(); live.pause(); }
+});
+/* Bildschirm wach halten, solange die Anzeige läuft (wo der Browser das kann) */
+async function wachHalten() {
+  try { if (navigator.wakeLock && document.visibilityState === "visible") wachSperre = await navigator.wakeLock.request("screen"); } catch {}
+}
+document.addEventListener("visibilitychange", () => { if (aktuellerModus === "anzeige") wachHalten(); });
+
+function modus(neu, probeSekunden) {
+  aktuellerModus = neu;
+  anzeigeEl.hidden = neu !== "anzeige";
+  werkstatt.hidden = neu !== "bearbeiten";
+  if (neu === "anzeige") {
+    live.probe(probeSekunden || 0);
+    live.start();
+    wach();
+    wachHalten();
+    if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+  } else {
+    live.stopp();
+    if (wachSperre) { wachSperre.release().catch(() => {}); wachSperre = null; }
+    if ((document.fullscreenElement || document.webkitFullscreenElement)) vollbild();
+    document.body.classList.remove("ruhig");
+    history.replaceState(null, "", "#bearbeiten");
+    bearbeitenAufbauen();
+  }
+}
+
+/* ---------- 5. Bearbeiten ---------- */
+let gewaehlt = 0, reiter = "folien", vorschau = null, miniaturen = [], standEl = null;
+const offen = () => kern() !== gespeicherterKern;
+
+function meldung(titel, text, knoepfe = [["OK", true]]) {
+  return new Promise(fertig => {
+    const zu = wert => { schleier.remove(); fertig(wert); };
+    const schleier = h("div", { id: "schleier" }, h("div", { class: "fenster" }, h("h3", {}, titel), h("p", {}, text),
+      h("div", { class: "unter" }, knoepfe.map(([name, wert, haupt]) =>
+        h("button", { class: "knopf" + (haupt ? " haupt" : ""), onclick: () => zu(wert) }, name)))));
+    document.body.append(schleier);
+    schleier.querySelector("button:last-child").focus();
+  });
+}
+
+function geaendert(nurDiese = true) {
+  standEl.textContent = offen() ? "● Ungespeicherte Änderungen" : "Alles gespeichert";
+  standEl.className = "stand" + (offen() ? " offen" : "");
+  if (reiter === "folien" && D.folien[gewaehlt]) {
+    vorschau.einzeln(D.folien[gewaehlt]);
+    if (nurDiese) karteFuellen(gewaehlt); else listeZeichnen();
+  } else if (D.folien.length) vorschau.einzeln(D.folien[Math.min(gewaehlt, D.folien.length - 1)]);
+}
+
+/* Eingabefelder: schreiben direkt in das Objekt und melden die Änderung */
+function feld(titel, obj, key, o = {}) {
+  const el = h(o.mehrzeilig ? "textarea" : "input", { type: o.typ || (o.mehrzeilig ? null : "text"), placeholder: o.beispiel, min: o.min, max: o.max, rows: o.mehrzeilig ? 3 : null });
+  el.value = obj[key] == null ? "" : obj[key];
+  el.addEventListener("input", () => {
+    const w = o.typ === "number" ? (el.value === "" ? "" : Number(el.value)) : el.value;
+    if (w === "" && o.leerLoeschen !== false) delete obj[key]; else obj[key] = w;
+    geaendert(!o.alles);
+  });
+  return h("label", { class: "feld" }, h("span", {}, titel), el, o.hilfe && h("div", { class: "hilfe" }, o.hilfe));
+}
+function haken(titel, an, wechsel) {
+  const box = h("input", { type: "checkbox", checked: an, onchange: () => wechsel(box.checked) });
+  return h("label", { class: "haken" }, box, h("span", {}, titel));
+}
+function auswahl(titel, wert, werte, wechsel) {
+  const sel = h("select", { onchange: () => wechsel(sel.value) }, werte.map(([w, name]) => h("option", { value: w }, name)));
+  sel.value = wert;
+  return h("label", { class: "feld" }, h("span", {}, titel), sel);
+}
+const knopf = (text, klick, o = {}) => h("button", { class: "knopf " + (o.klasse || ""), title: o.titel, "aria-label": o.titel, disabled: o.aus, onclick: e => { e.stopPropagation(); klick(); } }, text);
+
+function bearbeitenAufbauen() {
+  const vorschauRahmen = h("div", {});
+  standEl = h("div", { class: "stand" });
+  const rf = h("button", { onclick: () => { reiter = "folien"; bearbeitenAufbauen(); } }, "Folien");
+  const re = h("button", { onclick: () => { reiter = "einstellungen"; bearbeitenAufbauen(); } }, "Einstellungen");
+  (reiter === "folien" ? rf : re).className = "an";
+  werkstatt.replaceChildren(
+    h("header", {}, h("h1", {}, "Ansagen bearbeiten"), h("div", { class: "reiter" }, rf, re), standEl,
+      knopf("Probelauf", () => modus("anzeige", 90), { titel: "Zeigt die Anzeige und zählt 90 Sekunden herunter" }),
+      knopf("Anzeige starten", () => modus("anzeige")),
+      knopf("Speichern", speichern, { klasse: "haupt" })),
+    h("div", { class: "spalten" },
+      h("div", { id: "liste" }),
+      h("div", { id: "formular" }),
+      h("div", { id: "vorschau" }, vorschauRahmen,
+        h("div", { class: "unter" },
+          knopf("←", () => waehle(gewaehlt - 1), { titel: "Vorherige Folie" }),
+          knopf("→", () => waehle(gewaehlt + 1), { titel: "Nächste Folie" }),
+          h("span", { class: "hilfe" }, "So sieht die Folie auf dem Beamer aus.")),
+        h("div", { class: "info", id: "info" }))));
+  if (vorschau) vorschau.stopp();
+  vorschau = Buehne(vorschauRahmen, { still: true });
+  gewaehlt = Math.max(0, Math.min(gewaehlt, D.folien.length - 1));
+  listeZeichnen();
+  formularZeichnen();
+  geaendert();
+  infoZeichnen();
+}
+function infoZeichnen() {
+  const z = naechsterBeginn(D.einstellungen);
+  const n = sichtbareFolien().length;
+  document.getElementById("info").replaceChildren(
+    h("p", {}, "Nächster Gottesdienst: ", h("b", {}, z.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" }) + ", " + zz(z.getHours()) + ":" + zz(z.getMinutes()) + " Uhr")),
+    h("p", {}, "Heute würden ", h("b", {}, n === 1 ? "1 Folie" : n + " Folien"), " gezeigt."));
+}
+function waehle(i) {
+  if (!D.folien.length) return;
+  gewaehlt = (i + D.folien.length) % D.folien.length;
+  if (reiter !== "folien") { reiter = "folien"; return bearbeitenAufbauen(); }
+  listeZeichnen(); formularZeichnen(); geaendert();
+}
+
+/* Folienliste links */
+function karteFuellen(i) {
+  const f = D.folien[i], karte = document.getElementById("liste").children[i];
+  if (!karte) return;
+  const stand = folienStand(f);
+  karte.className = "karte" + (i === gewaehlt && reiter === "folien" ? " an" : "") + (stand !== "sichtbar" ? " blass" : "");
+  const bildName = f.bild && D.bilder[f.bild] ? "Bild: " + D.bilder[f.bild].name : "";
+  karte.querySelector(".kt").replaceChildren(...[
+    h("b", {}, f.titel || f.rubrik || bildName || "Leere Folie"),
+    stand === "ausgeblendet" && h("span", { class: "schild" }, "ausgeblendet"),
+    stand === "abgelaufen" && h("span", { class: "schild gelb" }, "abgelaufen seit " + kurzDatum(f.bis)),
+    stand === "spaeter" && h("span", { class: "schild gelb" }, "erst ab " + kurzDatum(f.von)),
+    stand === "sichtbar" && f.bis && h("span", { class: "schild" }, "bis " + kurzDatum(f.bis)),
+    (f.ausfall || (f.termine || []).some(t => t.ausfall)) && h("span", { class: "schild rot" }, "fällt aus")].filter(Boolean));
+  miniaturen[i].einzeln(f);
+}
+function listeZeichnen() {
+  const liste = document.getElementById("liste");
+  miniaturen = [];
+  liste.replaceChildren(...D.folien.map((f, i) => {
+    const mini = h("div", { class: "mini" });
+    const karte = h("div", { class: "karte", onclick: () => waehle(i) }, mini, h("div", { class: "kt" }),
+      h("div", { class: "kk" },
+        knopf("↑", () => schieben(i, -1), { titel: "Nach oben", aus: i === 0 }),
+        knopf("↓", () => schieben(i, 1), { titel: "Nach unten", aus: i === D.folien.length - 1 })));
+    miniaturen.push(Buehne(mini, { still: true, miniatur: true }));
+    return karte;
+  }), knopf("+ Neue Folie", () => { D.folien.push({ id: neueId("f"), anzeigen: true, rubrik: "", titel: "Neue Folie" }); waehle(D.folien.length - 1); }, { klasse: "neu" }));
+  D.folien.forEach((_, i) => karteFuellen(i));
+}
+function schieben(i, richtung) {
+  const [f] = D.folien.splice(i, 1);
+  D.folien.splice(i + richtung, 0, f);
+  if (gewaehlt === i) gewaehlt = i + richtung; else if (gewaehlt === i + richtung) gewaehlt = i;
+  listeZeichnen(); geaendert();
+}
+
+/* Formular in der Mitte */
+function formularZeichnen() {
+  const box = document.getElementById("formular");
+  box.replaceChildren(...(reiter === "folien" ? folienFormular() : einstellungenFormular()));
+}
+function folienFormular() {
+  const f = D.folien[gewaehlt];
+  if (!f) return [h("div", { class: "block" }, "Noch keine Folie da. Links auf „+ Neue Folie“ klicken.")];
+  const neuZeichnen = () => { formularZeichnen(); geaendert(); };
+  const hatBild = f.bild && D.bilder[f.bild];
+  const nurBild = hatBild && f.bildArt === "voll";
+
+  const termine = h("div", {}, (f.termine || []).map((t, i) => [
+    h("div", { class: "termin" },
+      ...[["zeit", "18:00 Uhr"], ["name", "Was?"], ["notiz", "Hinweis (z. B. 8 bis 11 Jahre)"]].map(([key, beispiel]) => {
+        const el = h("input", { type: "text", placeholder: beispiel, "aria-label": beispiel, value: t[key] || "", oninput: () => { t[key] = el.value; geaendert(); } });
+        return el;
+      }),
+      h("div", { class: "tk" },
+        knopf("↑", () => { f.termine.splice(i - 1, 0, f.termine.splice(i, 1)[0]); neuZeichnen(); }, { klasse: "klein", titel: "Nach oben", aus: i === 0 }),
+        knopf("✕", () => { f.termine.splice(i, 1); if (!f.termine.length) delete f.termine; neuZeichnen(); }, { klasse: "klein rot", titel: "Termin entfernen" }))),
+    h("div", { class: "termin-aus" },
+      haken("fällt aus", !!t.ausfall, an => { if (an) t.ausfall = "fällt aus"; else delete t.ausfall; neuZeichnen(); }),
+      t.ausfall && (() => { const el = h("input", { type: "text", "aria-label": "Text der roten Marke", value: t.ausfall, oninput: () => { t.ausfall = el.value || "fällt aus"; geaendert(); } }); return el; })()),
+  ]));
+
+  const bildWahl = h("div", { class: "bilder" },
+    h("button", { class: "bildwahl" + (!hatBild ? " an" : ""), onclick: () => { delete f.bild; neuZeichnen(); } }, "Kein Bild"),
+    Object.entries(D.bilder).map(([id, b]) => h("button", { class: "bildwahl" + (f.bild === id ? " an" : ""), title: b.name, "aria-label": b.name,
+      style: `background-image:url("${bildUrl(id)}")`, onclick: () => { f.bild = id; f.bildArt = f.bildArt || "seite"; neuZeichnen(); } })));
+  const datei = h("input", { type: "file", accept: "image/*", hidden: true, onchange: () => bildDazu(datei.files[0], f) });
+
+  const bloecke = [
+    h("div", { class: "block" },
+      haken("Diese Folie zeigen", f.anzeigen !== false, an => { f.anzeigen = an; neuZeichnen(); }),
+      h("div", { class: "hilfe" }, "Ohne Haken bleibt die Folie erhalten, wird aber nicht gezeigt.")),
+    h("div", { class: "block" }, h("h2", {}, "Text", nurBild && h("small", {}, "wird nicht gezeigt, weil das Bild die ganze Folie füllt")),
+      h("div", { class: "zwei" },
+        feld("Rubrik (kleine Zeile oben)", f, "rubrik", { beispiel: "z. B. Freitag" }),
+        feld("Wann und wo", f, "wann", { beispiel: "z. B. Montag · 16:00 Uhr" })),
+      feld("Titel", f, "titel", { beispiel: "Die große Überschrift" }),
+      feld("Bibelstelle", f, "bibelstelle", { beispiel: "leer lassen, wenn es keine gibt" }),
+      feld("Text", f, "text", { mehrzeilig: true, beispiel: "Ein oder zwei kurze Sätze", hilfe: "Wird der Text zu lang, macht die Folie ihn von selbst kleiner. Kurz liest sich aus der Ferne besser." })),
+    h("div", { class: "block" }, h("h2", {}, "Mehrere Termine untereinander", h("small", {}, "z. B. „Freitags bei uns“")),
+      termine,
+      knopf("+ Termin", () => { (f.termine = f.termine || []).push({ zeit: "", name: "" }); neuZeichnen(); }, { klasse: "klein" })),
+    h("div", { class: "block" }, h("h2", {}, "Bild oder Flyer"),
+      bildWahl, datei,
+      knopf("Bild vom Rechner hinzufügen …", () => datei.click(), { klasse: "klein" }),
+      h("span", { class: "hilfe" }, "  oder ein Bild hierher ziehen"),
+      hatBild && h("div", { style: "margin-top:14px" },
+        ...[["seite", "Rechts neben dem Text"], ["voll", "Ganze Folie – nur das Bild, ohne Text"], ["hinter", "Als Hintergrund hinter dem Text (für Fotos)"]].map(([wert, name]) => {
+          const r = h("input", { type: "radio", name: "bildart", checked: (f.bildArt || "seite") === wert, onchange: () => { f.bildArt = wert; neuZeichnen(); } });
+          return h("label", { class: "haken" }, r, h("span", {}, name));
+        }))),
+    h("div", { class: "block" }, h("h2", {}, "Fällt aus"),
+      haken("Die ganze Folie als ausgefallen zeigen (durchgestrichen, mit roter Marke)", !!f.ausfall, an => { if (an) f.ausfall = "Fällt diese Woche aus"; else delete f.ausfall; neuZeichnen(); }),
+      f.ausfall && feld("Text der roten Marke", f, "ausfall", { leerLoeschen: false }),
+      h("div", { class: "hilfe" }, "Einen einzelnen Termin lässt du oben bei „Mehrere Termine“ ausfallen.")),
+    h("div", { class: "block" }, h("h2", {}, "Zeitraum", h("small", {}, "die Folie kommt und verschwindet von selbst")),
+      h("div", { class: "zwei" },
+        feld("Zeigen ab (leer = ab sofort)", f, "von", { typ: "date" }),
+        feld("Zeigen bis einschließlich (leer = immer)", f, "bis", { typ: "date" })),
+      feld("Wie lange stehen bleiben? (Sekunden, leer = wie in den Einstellungen)", f, "sekunden", { typ: "number", min: 3, beispiel: String(D.einstellungen.sekundenProFolie) })),
+    h("div", { class: "unter" },
+      knopf("Folie duplizieren", () => { D.folien.splice(gewaehlt + 1, 0, Object.assign(JSON.parse(JSON.stringify(f)), { id: neueId("f") })); waehle(gewaehlt + 1); }),
+      h("span", { class: "frei" }),
+      knopf("Folie löschen", async () => {
+        if (!await meldung("Folie löschen?", `„${f.titel || f.rubrik || "Leere Folie"}“ wird entfernt.\nTipp: Mit dem Haken „Diese Folie zeigen“ kannst du sie auch nur ausblenden.`, [["Abbrechen", false], ["Löschen", true, true]])) return;
+        D.folien.splice(gewaehlt, 1); gewaehlt = Math.max(0, gewaehlt - 1); listeZeichnen(); formularZeichnen(); geaendert();
+      }, { klasse: "rot" })),
+  ];
+  const box = document.getElementById("formular");
+  box.ondragover = e => { e.preventDefault(); box.classList.add("fallen"); };
+  box.ondragleave = () => box.classList.remove("fallen");
+  box.ondrop = e => { e.preventDefault(); box.classList.remove("fallen"); if (e.dataTransfer.files[0]) bildDazu(e.dataTransfer.files[0], D.folien[gewaehlt]); };
+  return bloecke;
+}
+
+function einstellungenFormular() {
+  const E = D.einstellungen;
+  const o = { alles: true, leerLoeschen: false };
+  const neuZeichnen = () => { formularZeichnen(); geaendert(false); infoZeichnen(); };
+  const nachInfo = el => { el.addEventListener("input", infoZeichnen); el.addEventListener("change", infoZeichnen); return el; };
+  const tag = WOCHENTAGE[E.wochentag] || "Sonntag";
+  return [
+    h("div", { class: "block" }, h("h2", {}, "Gemeinde und Aussehen"),
+      feld("Name der Gemeinde (steht unten links)", E, "gemeinde", o),
+      auswahl("Farben", E.stimmung, [["nacht", "Dunkel – ruhig, für abgedunkelte Räume"], ["morgen", "Hell – besser lesbar, wenn viel Tageslicht im Raum ist"]], w => { E.stimmung = w; geaendert(false); })),
+    h("div", { class: "block" }, h("h2", {}, "Beginn des Gottesdienstes"),
+      h("div", { class: "zwei" },
+        auswahl("Wochentag", E.wochentag, WOCHENTAGE.map((n, i) => [i, n]), w => { E.wochentag = Number(w); neuZeichnen(); }),
+        nachInfo(feld("Beginn", E, "beginn", { typ: "time", ...o }))),
+      h("div", { class: "zwei" },
+        auswahl("Früherer Beginn regelmäßig", E.frueherAmSonntagNr, [[0, "nie"], ...[1, 2, 3, 4, 5].map(n => [n, `am ${n}. ${tag} im Monat`])], w => { E.frueherAmSonntagNr = Number(w); neuZeichnen(); }),
+        nachInfo(feld("Uhrzeit bei früherem Beginn", E, "frueherBeginn", { typ: "time", ...o }))),
+      h("label", { class: "feld" }, h("span", {}, "Zusätzlich an diesen einzelnen Tagen früher")),
+      (E.frueherAnTerminen || []).map((t, i) => {
+        const el = h("input", { type: "date", "aria-label": "Datum", value: t, style: "width:190px", oninput: () => { E.frueherAnTerminen[i] = el.value; geaendert(false); infoZeichnen(); } });
+        return h("div", { class: "unter", style: "margin:0 0 6px" }, el, knopf("✕", () => { E.frueherAnTerminen.splice(i, 1); neuZeichnen(); }, { klasse: "klein rot", titel: "Tag entfernen" }));
+      }),
+      knopf("+ Tag", () => { (E.frueherAnTerminen = E.frueherAnTerminen || []).push(""); neuZeichnen(); }, { klasse: "klein" })),
+    h("div", { class: "block" }, h("h2", {}, "Ablauf"),
+      h("div", { class: "zwei" },
+        feld("Sekunden pro Folie", E, "sekundenProFolie", { typ: "number", min: 3, ...o }),
+        feld("Großer Countdown in den letzten … Sekunden (0 = aus)", E, "grosserCountdownAb", { typ: "number", min: 0, ...o })),
+      haken("Countdown unten rechts zeigen", E.countdownZeigen !== false, an => { E.countdownZeigen = an; geaendert(false); }),
+      feld("Schlussbild: große Zeile", E, "schlussTitel", o),
+      feld("Schlussbild: kleine Zeile darunter", E, "schlussText", o)),
+    h("div", { class: "block" }, h("h2", {}, "Etwas ist schiefgegangen?"),
+      h("p", { class: "hilfe", style: "margin:0 0 10px" }, D.vorher ? "Die Datei merkt sich den Stand vor dem letzten Speichern." : "Nach dem ersten Speichern merkt sich die Datei den Stand davor."),
+      knopf("Stand vor dem letzten Speichern zurückholen", async () => {
+        if (!await meldung("Vorherigen Stand zurückholen?", "Folien und Einstellungen werden so, wie sie vor dem letzten Speichern waren. Erst mit „Speichern“ wird das endgültig.", [["Abbrechen", false], ["Zurückholen", true, true]])) return;
+        const alt = JSON.parse(D.vorher);
+        D.einstellungen = alt.einstellungen; D.folien = alt.folien;
+        reiter = "folien"; gewaehlt = 0; bearbeitenAufbauen();
+      }, { aus: !D.vorher })),
+  ];
+}
+
+/* Bild hinzufügen: große Fotos werden verkleinert, damit die Datei handlich bleibt */
+const alsDataUrl = blob => new Promise((ok, fehler) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = fehler; r.readAsDataURL(blob); });
+async function bildDazu(file, folie) {
+  if (!file) return;
+  try {
+    if (!/^image\//.test(file.type)) throw new Error(file.type === "application/pdf"
+      ? "Ein PDF kann hier nicht gezeigt werden. Mach ein Bildschirmfoto vom Flyer oder speichere ihn als Bild (JPG oder PNG)."
+      : "Das ist kein Bild. Es gehen JPG, PNG, GIF, WebP und SVG.");
+    let url;
+    if (/svg|gif/.test(file.type) || file.size < 500e3) url = await alsDataUrl(file);
+    else {
+      const quelle = URL.createObjectURL(file);
+      const bild = await new Promise((ok, fehler) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => fehler(new Error("Das Bild lässt sich nicht lesen.")); i.src = quelle; });
+      const faktor = Math.min(1, 2400 / Math.max(bild.naturalWidth, bild.naturalHeight));
+      const c = h("canvas", { width: Math.round(bild.naturalWidth * faktor), height: Math.round(bild.naturalHeight * faktor) });
+      const stift = c.getContext("2d");
+      const zeichne = weiss => { if (weiss) { stift.fillStyle = "#fff"; stift.fillRect(0, 0, c.width, c.height); } else stift.clearRect(0, 0, c.width, c.height); stift.drawImage(bild, 0, 0, c.width, c.height); };
+      zeichne(false);
+      url = file.type === "image/png" ? c.toDataURL("image/png") : "";
+      if (!url || url.length > 2.5e6) { zeichne(true); url = c.toDataURL("image/jpeg", 0.88); }
+      URL.revokeObjectURL(quelle);
+    }
+    let id = Object.keys(D.bilder).find(k => D.bilder[k].url === url);
+    if (!id) { id = neueId("b"); D.bilder[id] = { name: file.name, url }; }
+    folie.bild = id;
+    folie.bildArt = folie.bildArt || "seite";
+    formularZeichnen(); geaendert();
+  } catch (err) { meldung("Das Bild konnte nicht hinzugefügt werden", err.message || String(err)); }
+}
+
+/* ---------- 6. Speichern: die Datei schreibt sich selbst neu ---------- */
+const dateiName = decodeURIComponent(location.pathname.split("/").pop() || "") || "Ansagen.html";
+function dateiText() {
+  const zu = "<" + "/script>";
+  const json = JSON.stringify(D).replace(/</g, "\\u003c");
+  return `<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Ansagen</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style id="stil">${document.getElementById("stil").textContent}<` + `/style>
+</head>
+<body>
+<script id="daten" type="application/json">${json}${zu}
+<script id="programm">${document.getElementById("programm").textContent}${zu}
+</body>
+</html>
+`;
+}
+/* Der Browser merkt sich, welche Datei er beschreiben darf (nur Chrome und Edge können das). */
+function griffLager(aktion, wert) {
+  return new Promise(fertig => {
+    try {
+      const auf = indexedDB.open("ansagen", 1);
+      auf.onupgradeneeded = () => auf.result.createObjectStore("griffe");
+      auf.onerror = () => fertig(null);
+      auf.onsuccess = () => {
+        const lager = auf.result.transaction("griffe", "readwrite").objectStore("griffe");
+        const a = aktion === "lesen" ? lager.get(location.pathname) : aktion === "merken" ? lager.put(wert, location.pathname) : lager.delete(location.pathname);
+        a.onsuccess = () => fertig(a.result || null);
+        a.onerror = () => fertig(null);
+      };
+    } catch { fertig(null); }
+  });
+}
+let griff = null, helfer = false, herunterladenErklaert = false;
+if (location.protocol.startsWith("http")) fetch("/api/ping").then(r => r.json()).then(j => { helfer = j.ansagenHelfer === true; }).catch(() => {});
+
+async function schreibeMitGriff(text) {
+  if (!griff) griff = await griffLager("lesen");
+  for (let versuch = 0; versuch < 2; versuch++) {
+    if (!griff) {
+      const weiter = await meldung("Einmal die Datei zeigen",
+        `Gleich fragt der Browser, wohin gespeichert werden soll.\n\nWähle dort die Datei „${dateiName}“ in deinem Ansagen-Ordner aus und bestätige, dass sie ersetzt werden darf. Danach geht Speichern mit einem Klick.`,
+        [["Abbrechen", false], ["Weiter", true, true]]);
+      if (!weiter) return false;
+      griff = await window.showSaveFilePicker({ suggestedName: dateiName, types: [{ description: "Ansagen", accept: { "text/html": [".html"] } }] });
+    }
+    try {
+      if (await griff.queryPermission({ mode: "readwrite" }) !== "granted" && await griff.requestPermission({ mode: "readwrite" }) !== "granted")
+        throw Object.assign(new Error("Der Browser hat das Speichern nicht erlaubt."), { name: "Erlaubnis" });
+      const schreiber = await griff.createWritable();
+      await schreiber.write(text);
+      await schreiber.close();
+      await griffLager("merken", griff);
+      return true;
+    } catch (err) {
+      if (err.name === "Erlaubnis" || versuch) throw err;
+      griff = null;                          // Datei wurde verschoben oder gelöscht: neu wählen lassen
+      await griffLager("vergessen");
+    }
+  }
+}
+async function speichern() {
+  const alt = { vorher: D.vorher, gespeichert: D.gespeichert, bilder: D.bilder };
+  try {
+    if (offen()) D.vorher = gespeicherterKern;
+    D.gespeichert = new Date().toISOString();
+    const gebraucht = new Set([...D.folien, ...(D.vorher ? JSON.parse(D.vorher).folien : [])].map(f => f.bild));
+    D.bilder = Object.fromEntries(Object.entries(D.bilder).filter(([id]) => gebraucht.has(id)));   // unbenutzte Bilder fliegen raus
+    const text = dateiText();
+    if (helfer) {
+      const antwort = await fetch("/api/speichern", { method: "POST", headers: { "X-Ansagen": "1", "Content-Type": "text/html" }, body: text });
+      if (!antwort.ok) throw new Error((await antwort.text()) || "Der Helfer konnte nicht schreiben.");
+    } else if (window.showSaveFilePicker) {
+      if (!await schreibeMitGriff(text)) { Object.assign(D, alt); return; }
+    } else {
+      const a = h("a", { href: URL.createObjectURL(new Blob([text], { type: "text/html" })), download: dateiName });
+      document.body.append(a); a.click(); a.remove();
+      if (!herunterladenErklaert) await meldung("Die neue Datei liegt bei den Downloads",
+        `Dieser Browser darf Dateien nicht direkt überschreiben. Deshalb wurde eine neue „${dateiName}“ heruntergeladen.\n\nSchiebe sie in deinen Ansagen-Ordner und ersetze dort die alte Datei.\n\nBequemer: Öffne die Ansagen in Chrome oder Edge – oder am Mac über „Ansagen bearbeiten (Mac)“ im Ordner „Für den Mac“. Dann speichert ein Klick direkt.`);
+      herunterladenErklaert = true;
+    }
+    gespeicherterKern = kern();
+    if (aktuellerModus === "bearbeiten") { geaendert(); if (reiter === "einstellungen") formularZeichnen(); }
+  } catch (err) {
+    Object.assign(D, alt);
+    if (err.name !== "AbortError") meldung("Speichern hat nicht geklappt", (err.message || String(err)) + "\n\nDeine Änderungen sind noch da – lass dieses Fenster offen und versuche es noch einmal.");
+  }
+}
+addEventListener("beforeunload", e => { if (offen()) { e.preventDefault(); e.returnValue = ""; } });
+
+/* ---------- Los geht’s ---------- */
+const parameter = new URLSearchParams(location.search);
+const probe = Number(parameter.get("probe") || parameter.get("in")) || 0;
+modus(location.hash === "#bearbeiten" && !probe ? "bearbeiten" : "anzeige", probe);
+</script>
+</body>
+</html>
